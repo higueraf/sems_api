@@ -1,12 +1,15 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query,
-  UseInterceptors, UploadedFile,
+  Controller, Get, Post, Patch, Delete, Param, Body,
+  UseGuards, Query, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { OrganizersService } from './organizers.service';
-import { CreateOrganizerDto, UpdateOrganizerDto } from './dto/organizer.dto';
+import {
+  CreateOrganizerDto, UpdateOrganizerDto,
+  CreateMemberDto, UpdateMemberDto,
+} from './dto/organizer.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -15,15 +18,25 @@ import { UserRole } from '../../common/enums/role.enum';
 
 const logoStorage = diskStorage({
   destination: './uploads/logos',
-  filename: (_req, file, cb) => {
-    cb(null, `logo-${Date.now()}${extname(file.originalname)}`);
-  },
+  filename: (_req, file, cb) =>
+    cb(null, `logo-${Date.now()}${extname(file.originalname)}`),
 });
+
+const photoStorage = diskStorage({
+  destination: './uploads/photos',
+  filename: (_req, file, cb) =>
+    cb(null, `member-${Date.now()}${extname(file.originalname)}`),
+});
+
+const imageFilter = (_req: any, file: Express.Multer.File, cb: any) =>
+  cb(null, /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.originalname));
 
 @Controller('organizers')
 @UseGuards(JwtAuthGuard)
 export class OrganizersController {
   constructor(private readonly service: OrganizersService) {}
+
+  // ── Instituciones ──────────────────────────────────────────────────────────
 
   @Public()
   @Get()
@@ -40,28 +53,16 @@ export class OrganizersController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @Post()
-  create(@Body() dto: CreateOrganizerDto) {
-    return this.service.create(dto);
+  @Get('admin/:id')
+  findOne(@Param('id') id: string) {
+    return this.service.findOne(id);
   }
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @Post(':id/logo')
-  @UseInterceptors(
-    FileInterceptor('logo', {
-      storage: logoStorage,
-      fileFilter: (_req, file, cb) => {
-        cb(null, /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.originalname));
-      },
-      limits: { fileSize: 5 * 1024 * 1024 },
-    }),
-  )
-  uploadLogo(
-    @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
-    return this.service.updateLogo(id, `/uploads/logos/${file.filename}`);
+  @Post()
+  create(@Body() dto: CreateOrganizerDto) {
+    return this.service.create(dto);
   }
 
   @UseGuards(RolesGuard)
@@ -73,8 +74,79 @@ export class OrganizersController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
+  @Post(':id/logo')
+  @UseInterceptors(FileInterceptor('logo', {
+    storage: logoStorage,
+    fileFilter: imageFilter,
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
+  uploadLogo(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    return this.service.updateLogo(id, `/uploads/logos/${file.filename}`);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/photo')
+  @UseInterceptors(FileInterceptor('photo', {
+    storage: photoStorage,
+    fileFilter: imageFilter,
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
+  uploadPersonPhoto(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    return this.service.updatePhoto(id, `/uploads/photos/${file.filename}`);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
+  }
+
+  // ── Miembros de una institución ────────────────────────────────────────────
+
+  @Public()
+  @Get(':organizerId/members')
+  findMembers(@Param('organizerId') organizerId: string) {
+    return this.service.findMembers(organizerId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':organizerId/members')
+  createMember(
+    @Param('organizerId') organizerId: string,
+    @Body() dto: CreateMemberDto,
+  ) {
+    return this.service.createMember(organizerId, dto);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Patch('members/:id')
+  updateMember(@Param('id') id: string, @Body() dto: UpdateMemberDto) {
+    return this.service.updateMember(id, dto);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('members/:id/photo')
+  @UseInterceptors(FileInterceptor('photo', {
+    storage: photoStorage,
+    fileFilter: imageFilter,
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
+  uploadMemberPhoto(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.service.updateMemberPhoto(id, `/uploads/photos/${file.filename}`);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Delete('members/:id')
+  removeMember(@Param('id') id: string) {
+    return this.service.removeMember(id);
   }
 }

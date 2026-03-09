@@ -51,6 +51,13 @@ export class SubmissionAuthor {
   @Column({ default: 0 })
   authorOrder: number;
 
+  /**
+   * Foto del ponente — subida por admin/evaluador tras la aprobación
+   * del trabajo, para publicarla en la agenda definitiva.
+   */
+  @Column({ nullable: true, type: 'text' })
+  photoUrl: string;
+
   @CreateDateColumn()
   createdAt: Date;
 }

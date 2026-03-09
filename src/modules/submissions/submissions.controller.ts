@@ -1,8 +1,7 @@
 import {
   Controller, Get, Post, Patch, Param, Body, UseGuards, Query,
-  UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator,
-  FileTypeValidator, NestInterceptor, ExecutionContext, CallHandler,
-  Injectable,
+  UseInterceptors, UploadedFile, NestInterceptor, ExecutionContext,
+  CallHandler, Injectable,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -49,10 +48,16 @@ class ParseJsonFieldsInterceptor implements NestInterceptor {
 
 const fileStorage = diskStorage({
   destination: './uploads',
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, `submission-${uniqueSuffix}${extname(file.originalname)}`);
   },
+});
+
+const authorPhotoStorage = diskStorage({
+  destination: './uploads/photos',
+  filename: (_req, file, cb) =>
+    cb(null, `author-${Date.now()}${extname(file.originalname)}`),
 });
 
 @Controller('submissions')
@@ -140,5 +145,33 @@ export class SubmissionsController {
     @CurrentUser() user: User,
   ) {
     return this.submissionsService.sendCustomEmail(id, dto, user);
+  }
+
+  // ── Foto del autor ponente (solo admin/evaluador, post-aprobación) ──────────
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
+  @Post('authors/:authorId/photo')
+  @UseInterceptors(FileInterceptor('photo', {
+    storage: authorPhotoStorage,
+    fileFilter: (_req, file, cb) =>
+      cb(null, /\.(jpg|jpeg|png|webp)$/i.test(file.originalname)),
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
+  uploadAuthorPhoto(
+    @Param('authorId') authorId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.submissionsService.updateAuthorPhoto(
+      authorId,
+      `/uploads/photos/${file.filename}`,
+    );
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
+  @Patch('authors/:authorId/photo/remove')
+  removeAuthorPhoto(@Param('authorId') authorId: string) {
+    return this.submissionsService.updateAuthorPhoto(authorId, null);
   }
 }

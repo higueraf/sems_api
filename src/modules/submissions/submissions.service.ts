@@ -1,10 +1,10 @@
 import {
-  Injectable, NotFoundException, BadRequestException, ForbiddenException,
+  Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere } from 'typeorm';
-import { v4 as uuidv4 } from 'uuid';
+import { Repository } from 'typeorm';
 import { Submission } from '../../entities/submission.entity';
+import { SubmissionAuthor } from '../../entities/submission-author.entity';
 import { SubmissionStatusHistory } from '../../entities/submission-status-history.entity';
 import { User } from '../../entities/user.entity';
 import {
@@ -39,6 +39,7 @@ const STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
 export class SubmissionsService {
   constructor(
     @InjectRepository(Submission) private repo: Repository<Submission>,
+    @InjectRepository(SubmissionAuthor) private authorRepo: Repository<SubmissionAuthor>,
     @InjectRepository(SubmissionStatusHistory) private historyRepo: Repository<SubmissionStatusHistory>,
     private mailService: MailService,
   ) {}
@@ -206,6 +207,13 @@ export class SubmissionsService {
       relations: ['changedBy'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async updateAuthorPhoto(authorId: string, photoUrl: string | null) {
+    const author = await this.authorRepo.findOne({ where: { id: authorId } });
+    if (!author) throw new NotFoundException('Author not found');
+    author.photoUrl = photoUrl;
+    return this.authorRepo.save(author);
   }
 
   async getStats(eventId: string) {

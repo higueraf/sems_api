@@ -26,6 +26,7 @@ import { EventPageSection } from './entities/event-page-section.entity';
 import { ScientificProductType } from './entities/scientific-product-type.entity';
 import { ThematicAxis } from './entities/thematic-axis.entity';
 import { Organizer } from './entities/organizer.entity';
+import { OrganizerMember } from './entities/organizer-member.entity';
 import { Guideline } from './entities/guideline.entity';
 import { Submission } from './entities/submission.entity';
 import { SubmissionAuthor } from './entities/submission-author.entity';
@@ -53,8 +54,8 @@ import { EmailLog } from './entities/email-log.entity';
           : false,
         entities: [
           User, Country, Event, EventPageSection, ScientificProductType,
-          ThematicAxis, Organizer, Guideline, Submission, SubmissionAuthor,
-          SubmissionStatusHistory, AgendaSlot, EmailLog,
+          ThematicAxis, Organizer, OrganizerMember, Guideline, Submission,
+          SubmissionAuthor, SubmissionStatusHistory, AgendaSlot, EmailLog,
         ],
         synchronize: true,
         logging: false,
