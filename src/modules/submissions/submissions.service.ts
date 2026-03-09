@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, BadRequestException,
+  Injectable, NotFoundException, BadRequestException, Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -38,6 +38,8 @@ const STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
 
 @Injectable()
 export class SubmissionsService {
+  private readonly logger = new Logger(SubmissionsService.name);
+
   constructor(
     @InjectRepository(Submission) private repo: Repository<Submission>,
     @InjectRepository(SubmissionAuthor) private authorRepo: Repository<SubmissionAuthor>,
@@ -62,18 +64,17 @@ export class SubmissionsService {
     file?: Express.Multer.File,
     storage?: StorageService,
   ) {
+    // ── Validaciones síncronas (antes de tocar BD o storage) ────────────────
     if (file) {
-      if (file.size > 15 * 1024 * 1024) {
+      if (file.size > 15 * 1024 * 1024)
         throw new BadRequestException('El archivo no debe superar 15 MB');
-      }
-      if (!this.ALLOWED_MIME.includes(file.mimetype)) {
+      if (!this.ALLOWED_MIME.includes(file.mimetype))
         throw new BadRequestException(
           `Tipo de archivo no permitido (${file.mimetype}). Solo se aceptan PDF, DOC y DOCX.`,
         );
-      }
     }
 
-    // Generar código de referencia único
+    // ── Código de referencia único ──────────────────────────────────────────
     let referenceCode: string;
     let isUnique = false;
     while (!isUnique) {
@@ -82,21 +83,17 @@ export class SubmissionsService {
       if (!existing) isUnique = true;
     }
 
-    // Subir archivo a Supabase antes de guardar en BD
-    let fileUrl: string | undefined;
-    if (file && storage) {
-      fileUrl = await storage.upload(file, 'submissions', `manuscript-${referenceCode}`);
-    }
-
+    // ── Guardar en BD inmediatamente (sin esperar B2) ───────────────────────
+    // fileUrl queda null temporalmente; se actualiza en background
     const submission = this.repo.create({
       ...dto,
       referenceCode,
       status: SubmissionStatus.RECEIVED,
-      ...(file && { fileUrl: fileUrl || `/uploads/${file.filename}`, fileName: file.originalname }),
+      ...(file && { fileName: file.originalname }),
     });
-
     const saved = await this.repo.save(submission);
 
+    // Historial de estado
     await this.historyRepo.save(
       this.historyRepo.create({
         submissionId: saved.id,
@@ -105,8 +102,36 @@ export class SubmissionsService {
       }),
     );
 
-    const populated = await this.findOne(saved.id);
-    await this.mailService.sendSubmissionReceived(populated);
+    // ── Background: subida a B2 + correo (NO bloquean la respuesta) ─────────
+    // El ponente recibe respuesta inmediata con su referenceCode.
+    // El archivo se sube a B2 y el correo se envía en paralelo sin await.
+    setImmediate(async () => {
+      try {
+        // 1. Subir archivo a Backblaze B2
+        if (file && storage) {
+          const fileUrl = await storage.upload(
+            file,
+            'submissions',
+            `manuscript-${referenceCode}`,
+          );
+          await this.repo.update(saved.id, { fileUrl });
+          this.logger.log(`📄 Manuscrito subido a B2: ${fileUrl}`);
+        }
+      } catch (err) {
+        this.logger.error(`Error subiendo manuscrito a B2 [${referenceCode}]: ${err.message}`);
+      }
+
+      try {
+        // 2. Enviar correo de confirmación
+        const populated = await this.repo.findOne({
+          where: { id: saved.id },
+          relations: ['thematicAxis', 'productType', 'authors', 'authors.country'],
+        });
+        if (populated) await this.mailService.sendSubmissionReceived(populated);
+      } catch (err) {
+        this.logger.error(`Error enviando correo [${referenceCode}]: ${err.message}`);
+      }
+    });
 
     return saved;
   }
