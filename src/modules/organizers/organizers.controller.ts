@@ -3,30 +3,21 @@ import {
   UseGuards, Query, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { OrganizersService } from './organizers.service';
 import {
   CreateOrganizerDto, UpdateOrganizerDto,
   CreateMemberDto, UpdateMemberDto,
 } from './dto/organizer.dto';
+import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { UserRole } from '../../common/enums/role.enum';
 
-const logoStorage = diskStorage({
-  destination: './uploads/logos',
-  filename: (_req, file, cb) =>
-    cb(null, `logo-${Date.now()}${extname(file.originalname)}`),
-});
-
-const photoStorage = diskStorage({
-  destination: './uploads/photos',
-  filename: (_req, file, cb) =>
-    cb(null, `member-${Date.now()}${extname(file.originalname)}`),
-});
+/** Multer en memoria — Cloudinary lee desde buffer, sin tocar el disco */
+const memStorage = memoryStorage();
 
 const imageFilter = (_req: any, file: Express.Multer.File, cb: any) =>
   cb(null, /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.originalname));
@@ -34,7 +25,10 @@ const imageFilter = (_req: any, file: Express.Multer.File, cb: any) =>
 @Controller('organizers')
 @UseGuards(JwtAuthGuard)
 export class OrganizersController {
-  constructor(private readonly service: OrganizersService) {}
+  constructor(
+    private readonly service: OrganizersService,
+    private readonly storage: StorageService,
+  ) {}
 
   // ── Instituciones ──────────────────────────────────────────────────────────
 
@@ -76,24 +70,32 @@ export class OrganizersController {
   @Roles(UserRole.ADMIN)
   @Post(':id/logo')
   @UseInterceptors(FileInterceptor('logo', {
-    storage: logoStorage,
+    storage: memStorage,
     fileFilter: imageFilter,
     limits: { fileSize: 5 * 1024 * 1024 },
   }))
-  uploadLogo(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
-    return this.service.updateLogo(id, `/uploads/logos/${file.filename}`);
+  async uploadLogo(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const url = await this.storage.upload(file, 'logos', `org-${id}`);
+    return this.service.updateLogo(id, url);
   }
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @Post(':id/photo')
   @UseInterceptors(FileInterceptor('photo', {
-    storage: photoStorage,
+    storage: memStorage,
     fileFilter: imageFilter,
     limits: { fileSize: 5 * 1024 * 1024 },
   }))
-  uploadPersonPhoto(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
-    return this.service.updatePhoto(id, `/uploads/photos/${file.filename}`);
+  async uploadPersonPhoto(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const url = await this.storage.upload(file, 'photos', `person-${id}`);
+    return this.service.updatePhoto(id, url);
   }
 
   @UseGuards(RolesGuard)
@@ -132,15 +134,16 @@ export class OrganizersController {
   @Roles(UserRole.ADMIN)
   @Post('members/:id/photo')
   @UseInterceptors(FileInterceptor('photo', {
-    storage: photoStorage,
+    storage: memStorage,
     fileFilter: imageFilter,
     limits: { fileSize: 5 * 1024 * 1024 },
   }))
-  uploadMemberPhoto(
+  async uploadMemberPhoto(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.service.updateMemberPhoto(id, `/uploads/photos/${file.filename}`);
+    const url = await this.storage.upload(file, 'photos', `member-${id}`);
+    return this.service.updateMemberPhoto(id, url);
   }
 
   @UseGuards(RolesGuard)

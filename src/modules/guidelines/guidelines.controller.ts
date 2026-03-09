@@ -1,24 +1,33 @@
 import {
   Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query,
-  UploadedFile, UseInterceptors, BadRequestException, Res,
+  UploadedFile, UseInterceptors, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { v4 as uuidv4 } from 'uuid';
-import { Response } from 'express';
+import { memoryStorage } from 'multer';
 import { GuidelinesService } from './guidelines.service';
 import { CreateGuidelineDto, UpdateGuidelineDto } from './dto/guideline.dto';
+import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { UserRole } from '../../common/enums/role.enum';
 
+const ALLOWED_MIMES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+];
+
 @Controller('guidelines')
 @UseGuards(JwtAuthGuard)
 export class GuidelinesController {
-  constructor(private readonly service: GuidelinesService) {}
+  constructor(
+    private readonly service: GuidelinesService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Public()
   @Get()
@@ -54,55 +63,35 @@ export class GuidelinesController {
     return this.service.remove(id);
   }
 
-  /**
-   * POST /guidelines/:id/upload
-   * Sube un archivo (PDF, PPTX, DOCX) como material de apoyo a una pauta.
-   * Solo accesible por administradores.
-   */
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @Post(':id/upload')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: join(process.cwd(), 'uploads', 'guidelines'),
-        filename: (_req, file, cb) => {
-          const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
-          cb(null, uniqueName);
-        },
-      }),
-      fileFilter: (_req, file, cb) => {
-        const allowed = [
-          'application/pdf',
-          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-          'application/vnd.ms-powerpoint',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/msword',
-        ];
-        if (!allowed.includes(file.mimetype)) {
-          return cb(
-            new BadRequestException('Solo se permiten archivos PDF, PPTX o DOCX'),
-            false,
-          );
-        }
-        cb(null, true);
-      },
-      limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB máx
-    }),
-  )
-  uploadFile(
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    fileFilter: (_req, file, cb) => {
+      if (!ALLOWED_MIMES.includes(file.mimetype)) {
+        return cb(new BadRequestException('Solo se permiten PDF, PPTX o DOCX'), false);
+      }
+      cb(null, true);
+    },
+    limits: { fileSize: 20 * 1024 * 1024 },
+  }))
+  async uploadFile(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('No se recibió ningún archivo');
-    const fileUrl = `/uploads/guidelines/${file.filename}`;
-    return this.service.attachFile(id, fileUrl, file.originalname, file.mimetype);
+    const url = await this.storage.upload(file, 'guidelines', `guideline-${id}`);
+    return this.service.attachFile(id, url, file.originalname, file.mimetype);
   }
 
-  /**
-   * DELETE /guidelines/:id/upload
-   * Elimina el archivo adjunto de una pauta.
-   */
+  /** GET /guidelines/:id/download — URL firmada para descargar la pauta */
+  @Public()
+  @Get(':id/download')
+  getDownloadUrl(@Param('id') id: string) {
+    return this.service.getDownloadUrl(id);
+  }
+
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @Delete(':id/upload')

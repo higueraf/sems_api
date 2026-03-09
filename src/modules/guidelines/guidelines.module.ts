@@ -1,18 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { MulterModule } from '@nestjs/platform-express';
-import { join } from 'path';
 import { GuidelinesController } from './guidelines.controller';
 import { GuidelinesService } from './guidelines.service';
 import { Guideline } from '../../entities/guideline.entity';
 
+// MulterModule eliminado — ya no usamos diskStorage
+// StorageService viene del StorageModule global (@Global)
+
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Guideline]),
-    MulterModule.register({
-      dest: join(process.cwd(), 'uploads', 'guidelines'),
-    }),
-  ],
+  imports: [TypeOrmModule.forFeature([Guideline])],
   controllers: [GuidelinesController],
   providers: [GuidelinesService],
 })

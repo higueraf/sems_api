@@ -1,14 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { unlink } from 'fs/promises';
-import { join } from 'path';
 import { Guideline } from '../../entities/guideline.entity';
 import { CreateGuidelineDto, UpdateGuidelineDto } from './dto/guideline.dto';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class GuidelinesService {
-  constructor(@InjectRepository(Guideline) private repo: Repository<Guideline>) {}
+  constructor(
+    @InjectRepository(Guideline) private repo: Repository<Guideline>,
+    private readonly storage: StorageService,
+  ) {}
 
   findByEvent(eventId: string, visibleOnly = false) {
     return this.repo.find({
@@ -35,16 +37,17 @@ export class GuidelinesService {
 
   async remove(id: string) {
     const item = await this.findOne(id);
-    // Si tiene archivo adjunto, lo eliminamos del disco
+    // Eliminar archivo de Backblaze B2 si existe
     if (item.fileUrl) {
-      await this.deleteFileFromDisk(item.fileUrl).catch(() => null);
+      await this.storage.delete(item.fileUrl).catch(() => null);
     }
     await this.repo.remove(item);
-    return { message: 'Guideline deleted' };
+    return { message: 'Guideline eliminada' };
   }
 
   /**
-   * Asocia un archivo subido a una pauta existente.
+   * Asocia un archivo (ya subido a B2) a una pauta existente.
+   * Si había un archivo previo, lo elimina de B2 primero.
    */
   async attachFile(
     id: string,
@@ -53,35 +56,39 @@ export class GuidelinesService {
     fileMimeType: string,
   ) {
     const item = await this.findOne(id);
-    // Eliminar archivo previo si existe
+    // Borrar archivo anterior de B2 si existe
     if (item.fileUrl) {
-      await this.deleteFileFromDisk(item.fileUrl).catch(() => null);
+      await this.storage.delete(item.fileUrl).catch(() => null);
     }
-    item.fileUrl = fileUrl;
-    item.fileName = fileName;
+    item.fileUrl      = fileUrl;
+    item.fileName     = fileName;
     item.fileMimeType = fileMimeType;
     return this.repo.save(item);
   }
 
   /**
-   * Elimina el archivo adjunto de una pauta.
+   * Genera una URL de descarga firmada (válida 1 hora) para el archivo adjunto.
+   * Funciona tanto con referencias B2 como con URLs de Cloudinary o rutas locales.
+   */
+  async getDownloadUrl(id: string): Promise<{ url: string; fileName: string }> {
+    const item = await this.findOne(id);
+    if (!item.fileUrl) throw new NotFoundException('Esta pauta no tiene archivo adjunto');
+    const url = await this.storage.getSignedUrl(item.fileUrl, 3600);
+    return { url, fileName: item.fileName };
+  }
+
+  /**
+   * Elimina el archivo adjunto de una pauta (de B2 y de la BD).
    */
   async removeFile(id: string) {
     const item = await this.findOne(id);
     if (item.fileUrl) {
-      await this.deleteFileFromDisk(item.fileUrl).catch(() => null);
+      await this.storage.delete(item.fileUrl).catch(() => null);
     }
-    item.fileUrl = null;
-    item.fileName = null;
+    item.fileUrl      = null;
+    item.fileName     = null;
     item.fileMimeType = null;
     await this.repo.save(item);
     return { message: 'Archivo eliminado correctamente' };
-  }
-
-  /** Borra físicamente un archivo del disco dado su path relativo. */
-  private async deleteFileFromDisk(relativeUrl: string) {
-    // relativeUrl = "/uploads/guidelines/xxx.pdf"
-    const absolutePath = join(process.cwd(), relativeUrl);
-    await unlink(absolutePath);
   }
 }

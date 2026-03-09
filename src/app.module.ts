@@ -18,6 +18,8 @@ import { ScientificProductTypesModule } from './modules/scientific-product-types
 import { SubmissionsModule } from './modules/submissions/submissions.module';
 import { AgendaModule } from './modules/agenda/agenda.module';
 import { MailModule } from './modules/mail/mail.module';
+import { HealthModule } from './modules/health/health.module';
+import { StorageModule } from './modules/storage/storage.module';
 
 import { User } from './entities/user.entity';
 import { Country } from './entities/country.entity';
@@ -62,6 +64,8 @@ import { EmailLog } from './entities/email-log.entity';
       }),
       inject: [ConfigService],
     }),
+    StorageModule,
+    HealthModule,
     MailModule,
     AuthModule,
     UsersModule,

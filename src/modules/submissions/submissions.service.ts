@@ -14,6 +14,7 @@ import {
 import { SubmissionStatus } from '../../common/enums/submission-status.enum';
 import { MailService } from '../mail/mail.service';
 import { UserRole } from '../../common/enums/role.enum';
+import { StorageService } from '../storage/storage.service';
 
 // Valid status transitions to enforce workflow integrity
 const STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
@@ -56,10 +57,14 @@ export class SubmissionsService {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   ];
 
-  async create(dto: CreateSubmissionDto, file?: Express.Multer.File) {
+  async create(
+    dto: CreateSubmissionDto,
+    file?: Express.Multer.File,
+    storage?: StorageService,
+  ) {
     if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        throw new BadRequestException('El archivo no debe superar 10 MB');
+      if (file.size > 15 * 1024 * 1024) {
+        throw new BadRequestException('El archivo no debe superar 15 MB');
       }
       if (!this.ALLOWED_MIME.includes(file.mimetype)) {
         throw new BadRequestException(
@@ -67,21 +72,27 @@ export class SubmissionsService {
         );
       }
     }
+
+    // Generar código de referencia único
     let referenceCode: string;
     let isUnique = false;
-
-    // Ensure unique reference code
     while (!isUnique) {
       referenceCode = this.generateReferenceCode();
       const existing = await this.repo.findOne({ where: { referenceCode } });
       if (!existing) isUnique = true;
     }
 
+    // Subir archivo a Supabase antes de guardar en BD
+    let fileUrl: string | undefined;
+    if (file && storage) {
+      fileUrl = await storage.upload(file, 'submissions', `manuscript-${referenceCode}`);
+    }
+
     const submission = this.repo.create({
       ...dto,
       referenceCode,
       status: SubmissionStatus.RECEIVED,
-      ...(file && { fileUrl: `/uploads/${file.filename}`, fileName: file.originalname }),
+      ...(file && { fileUrl: fileUrl || `/uploads/${file.filename}`, fileName: file.originalname }),
     });
 
     const saved = await this.repo.save(submission);
@@ -209,9 +220,17 @@ export class SubmissionsService {
     });
   }
 
-  async updateAuthorPhoto(authorId: string, photoUrl: string | null) {
+  async updateAuthorPhoto(
+    authorId: string,
+    photoUrl: string | null,
+    storage?: StorageService,
+  ) {
     const author = await this.authorRepo.findOne({ where: { id: authorId } });
     if (!author) throw new NotFoundException('Author not found');
+    // Eliminar foto anterior de Cloudinary si existe y se reemplaza
+    if (author.photoUrl && storage) {
+      await storage.delete(author.photoUrl).catch(() => null);
+    }
     author.photoUrl = photoUrl;
     return this.authorRepo.save(author);
   }

@@ -7,12 +7,14 @@ import {
   CreateOrganizerDto, UpdateOrganizerDto,
   CreateMemberDto, UpdateMemberDto,
 } from './dto/organizer.dto';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class OrganizersService {
   constructor(
     @InjectRepository(Organizer) private orgRepo: Repository<Organizer>,
     @InjectRepository(OrganizerMember) private memberRepo: Repository<OrganizerMember>,
+    private readonly storage: StorageService,
   ) {}
 
   // ── Organizers (instituciones) ─────────────────────────────────────────────
@@ -23,11 +25,11 @@ export class OrganizersService {
       relations: ['country', 'members', 'members.country'],
       order: { displayOrder: 'ASC', name: 'ASC' },
     });
-    // Para rutas públicas, filtrar miembros no visibles
     if (visibleOnly) {
       return orgs.map((o) => ({
         ...o,
-        members: (o.members ?? []).filter((m) => m.isVisible)
+        members: (o.members ?? [])
+          .filter((m) => m.isVisible)
           .sort((a, b) => a.displayOrder - b.displayOrder),
       }));
     }
@@ -55,18 +57,29 @@ export class OrganizersService {
 
   async updateLogo(id: string, logoUrl: string) {
     const item = await this.findOne(id);
+    // Eliminar logo anterior de Cloudinary si existe
+    if (item.logoUrl) {
+      await this.storage.delete(item.logoUrl).catch(() => null);
+    }
     item.logoUrl = logoUrl;
     return this.orgRepo.save(item);
   }
 
   async updatePhoto(id: string, photoUrl: string) {
     const item = await this.findOne(id);
+    // Eliminar foto anterior de Cloudinary si existe
+    if (item.photoUrl) {
+      await this.storage.delete(item.photoUrl).catch(() => null);
+    }
     item.photoUrl = photoUrl;
     return this.orgRepo.save(item);
   }
 
   async remove(id: string) {
     const item = await this.findOne(id);
+    // Limpiar archivos de Cloudinary antes de borrar el registro
+    if (item.logoUrl)  await this.storage.delete(item.logoUrl).catch(() => null);
+    if (item.photoUrl) await this.storage.delete(item.photoUrl).catch(() => null);
     await this.orgRepo.remove(item);
     return { message: 'Organizer deleted' };
   }
@@ -88,7 +101,6 @@ export class OrganizersService {
   }
 
   async createMember(organizerId: string, dto: CreateMemberDto) {
-    // Verificar que la institución existe
     await this.findOne(organizerId);
     return this.memberRepo.save(this.memberRepo.create({ ...dto, organizerId }));
   }
@@ -101,12 +113,18 @@ export class OrganizersService {
 
   async updateMemberPhoto(id: string, photoUrl: string) {
     const m = await this.findMember(id);
+    // Eliminar foto anterior de Cloudinary si existe
+    if (m.photoUrl) {
+      await this.storage.delete(m.photoUrl).catch(() => null);
+    }
     m.photoUrl = photoUrl;
     return this.memberRepo.save(m);
   }
 
   async removeMember(id: string) {
     const m = await this.findMember(id);
+    // Limpiar foto de Cloudinary antes de borrar el registro
+    if (m.photoUrl) await this.storage.delete(m.photoUrl).catch(() => null);
     await this.memberRepo.remove(m);
     return { message: 'Member deleted' };
   }
