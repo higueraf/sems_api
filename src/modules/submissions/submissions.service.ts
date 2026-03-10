@@ -9,14 +9,12 @@ import { SubmissionStatusHistory } from '../../entities/submission-status-histor
 import { User } from '../../entities/user.entity';
 import {
   CreateSubmissionDto, UpdateSubmissionStatusDto,
-  SendCustomEmailDto, AssignEvaluatorDto,
+  SendCustomEmailDto, AssignEvaluatorDto, BulkEmailDto,
 } from './dto/submission.dto';
 import { SubmissionStatus } from '../../common/enums/submission-status.enum';
 import { MailService } from '../mail/mail.service';
-import { UserRole } from '../../common/enums/role.enum';
 import { StorageService } from '../storage/storage.service';
 
-// Valid status transitions to enforce workflow integrity
 const STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
   [SubmissionStatus.RECEIVED]: [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.WITHDRAWN],
   [SubmissionStatus.UNDER_REVIEW]: [
@@ -59,12 +57,15 @@ export class SubmissionsService {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   ];
 
+  private readonly ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+
   async create(
     dto: CreateSubmissionDto,
     file?: Express.Multer.File,
     storage?: StorageService,
+    authorPhotos: Express.Multer.File[] = [],
   ) {
-    // ── Validaciones síncronas (antes de tocar BD o storage) ────────────────
+    // ── Validaciones síncronas ───────────────────────────────────────────────
     if (file) {
       if (file.size > 15 * 1024 * 1024)
         throw new BadRequestException('El archivo no debe superar 15 MB');
@@ -74,7 +75,16 @@ export class SubmissionsService {
         );
     }
 
-    // ── Código de referencia único ──────────────────────────────────────────
+    for (const photo of authorPhotos) {
+      if (photo.size > 5 * 1024 * 1024)
+        throw new BadRequestException(`La foto "${photo.originalname}" supera 5 MB`);
+      if (!this.ALLOWED_IMAGE_MIME.includes(photo.mimetype))
+        throw new BadRequestException(
+          `Formato de foto no válido (${photo.mimetype}). Use JPG, PNG o WebP.`,
+        );
+    }
+
+    // ── Código de referencia único ───────────────────────────────────────────
     let referenceCode: string;
     let isUnique = false;
     while (!isUnique) {
@@ -83,8 +93,7 @@ export class SubmissionsService {
       if (!existing) isUnique = true;
     }
 
-    // ── Guardar en BD inmediatamente (sin esperar B2) ───────────────────────
-    // fileUrl queda null temporalmente; se actualiza en background
+    // ── Guardar en BD inmediatamente ─────────────────────────────────────────
     const submission = this.repo.create({
       ...dto,
       referenceCode,
@@ -93,7 +102,6 @@ export class SubmissionsService {
     });
     const saved = await this.repo.save(submission);
 
-    // Historial de estado
     await this.historyRepo.save(
       this.historyRepo.create({
         submissionId: saved.id,
@@ -102,12 +110,12 @@ export class SubmissionsService {
       }),
     );
 
-    // ── Background: subida a B2 + correo (NO bloquean la respuesta) ─────────
-    // El ponente recibe respuesta inmediata con su referenceCode.
-    // El archivo se sube a B2 y el correo se envía en paralelo sin await.
+    // ── Background: uploads + correo ─────────────────────────────────────────
+    // El ponente recibe referenceCode inmediatamente.
+    // Archivos y correo se procesan de forma asíncrona.
     setImmediate(async () => {
+      // 1. Subir manuscrito a Backblaze B2
       try {
-        // 1. Subir archivo a Backblaze B2
         if (file && storage) {
           const fileUrl = await storage.upload(
             file,
@@ -121,8 +129,54 @@ export class SubmissionsService {
         this.logger.error(`Error subiendo manuscrito a B2 [${referenceCode}]: ${err.message}`);
       }
 
+      // 2. Subir fotos de autores a Cloudinary
+      //    fieldname = "authorPhoto_0", "authorPhoto_1", ...
+      //    El índice coincide con el orden del array dto.authors
+      if (authorPhotos.length > 0 && storage) {
+        try {
+          // Recuperar los autores guardados por la cascada de TypeORM
+          const populatedForPhotos = await this.repo.findOne({
+            where: { id: saved.id },
+            relations: ['authors'],
+          });
+
+          if (populatedForPhotos?.authors?.length) {
+            // Ordenar autores por authorOrder para mantener correspondencia con el índice
+            const sortedAuthors = [...populatedForPhotos.authors].sort(
+              (a, b) => a.authorOrder - b.authorOrder,
+            );
+
+            for (const photoFile of authorPhotos) {
+              // Extraer índice del fieldname: "authorPhoto_0" → 0
+              const match = photoFile.fieldname.match(/authorPhoto_(\d+)/);
+              if (!match) continue;
+              const idx = parseInt(match[1], 10);
+
+              const author = sortedAuthors[idx];
+              if (!author) continue;
+
+              try {
+                const photoUrl = await storage.upload(
+                  photoFile,
+                  'photos',
+                  `author-${author.id}`,
+                );
+                await this.authorRepo.update(author.id, { photoUrl });
+                this.logger.log(`📸 Foto del autor ${author.fullName} subida: ${photoUrl}`);
+              } catch (photoErr) {
+                this.logger.error(
+                  `Error subiendo foto del autor [${author.fullName}]: ${photoErr.message}`,
+                );
+              }
+            }
+          }
+        } catch (err) {
+          this.logger.error(`Error procesando fotos de autores [${referenceCode}]: ${err.message}`);
+        }
+      }
+
+      // 3. Correo de confirmación
       try {
-        // 2. Enviar correo de confirmación
         const populated = await this.repo.findOne({
           where: { id: saved.id },
           relations: ['thematicAxis', 'productType', 'authors', 'authors.country'],
@@ -206,7 +260,6 @@ export class SubmissionsService {
       }),
     );
 
-    // Correo en background — no bloquea la respuesta al admin
     if (dto.notifyApplicant !== false) {
       setImmediate(async () => {
         try {
@@ -231,7 +284,6 @@ export class SubmissionsService {
     const correspondingAuthor = submission.authors.find((a) => a.isCorresponding) || submission.authors[0];
     if (!correspondingAuthor) throw new BadRequestException('No author found for this submission');
 
-    // Correo individual en background
     setImmediate(async () => {
       try {
         await this.mailService.sendCustomEmail(
@@ -250,12 +302,6 @@ export class SubmissionsService {
     return { success: true, sentTo: correspondingAuthor.email };
   }
 
-  /**
-   * Envío masivo de correos a postulantes.
-   * Filtra por estado si se indica. Responde inmediatamente con el total
-   * a enviar y despacha todos los correos en background con un delay
-   * de 300ms entre cada uno para no saturar Gmail SMTP.
-   */
   async sendBulkEmail(
     dto: { subject: string; body: string; status?: string; eventId: string },
     user: User,
@@ -278,8 +324,6 @@ export class SubmissionsService {
       return { queued: 0, message: 'No hay postulaciones que coincidan con el filtro' };
     }
 
-    // Despachar en background con throttle de 300ms entre correos
-    // para respetar el límite de Gmail (500/día, ~1.7/seg)
     setImmediate(async () => {
       let sent = 0;
       let failed = 0;
@@ -300,7 +344,6 @@ export class SubmissionsService {
           failed++;
           this.logger.error(`Bulk email error [${sub.referenceCode}]: ${err.message}`);
         }
-        // Throttle: 300ms entre correos → máx ~200/min, dentro del límite de Gmail
         await new Promise((r) => setTimeout(r, 300));
       }
       this.logger.log(`📧 Bulk email completado: ${sent} enviados, ${failed} fallidos`);
@@ -327,7 +370,6 @@ export class SubmissionsService {
   ) {
     const author = await this.authorRepo.findOne({ where: { id: authorId } });
     if (!author) throw new NotFoundException('Author not found');
-    // Eliminar foto anterior de Cloudinary si existe y se reemplaza
     if (author.photoUrl && storage) {
       await storage.delete(author.photoUrl).catch(() => null);
     }

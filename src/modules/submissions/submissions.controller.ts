@@ -1,10 +1,10 @@
 import {
   Controller, Get, Post, Patch, Param, Body, UseGuards, Query,
-  UseInterceptors, UploadedFile, NestInterceptor, ExecutionContext,
-  CallHandler, Injectable,
+  UseInterceptors, UploadedFile, UploadedFiles, NestInterceptor,
+  ExecutionContext, CallHandler, Injectable,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { SubmissionsService } from './submissions.service';
 import { StorageService } from '../storage/storage.service';
@@ -46,8 +46,6 @@ class ParseJsonFieldsInterceptor implements NestInterceptor {
   }
 }
 
-// Todo usa memoryStorage → StorageService enruta a Cloudinary o Supabase según tipo
-
 @Controller('submissions')
 @UseGuards(JwtAuthGuard)
 export class SubmissionsController {
@@ -56,20 +54,43 @@ export class SubmissionsController {
     private readonly storage: StorageService,
   ) {}
 
+  // ── Crear postulación ────────────────────────────────────────────────────
+  // Acepta múltiples archivos en un solo multipart:
+  //   file           → manuscrito (PDF/Word, máx 15 MB)
+  //   authorPhoto_0  → foto del autor 0 (JPG/PNG/WebP, máx 5 MB)
+  //   authorPhoto_1  → foto del autor 1
+  //   authorPhoto_2  → foto del autor 2
+  //   authorPhoto_3  → foto del autor 3
+
   @Public()
   @Post()
   @UseInterceptors(
-    FileInterceptor('file', {
+    AnyFilesInterceptor({
       storage: memoryStorage(),
-      limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB máx (Word con imágenes)
+      limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB — el manuscrito es el mayor
+      fileFilter: (_req, file, cb) => {
+        const isDocument = /\.(pdf|doc|docx)$/i.test(file.originalname) ||
+          ['application/pdf', 'application/msword',
+           'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+          .includes(file.mimetype);
+        const isImage = /\.(jpg|jpeg|png|webp)$/i.test(file.originalname) ||
+          file.mimetype.startsWith('image/');
+        cb(null, isDocument || isImage);
+      },
     }),
     new ParseJsonFieldsInterceptor('authors', 'productTypeIds'),
   )
   async create(
     @Body() dto: CreateSubmissionDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFiles() files: Express.Multer.File[],
   ) {
-    return this.submissionsService.create(dto, file, this.storage);
+    const allFiles = files ?? [];
+
+    // Separar manuscrito de fotos de autores
+    const manuscript  = allFiles.find(f => f.fieldname === 'file');
+    const authorPhotos = allFiles.filter(f => f.fieldname.startsWith('authorPhoto_'));
+
+    return this.submissionsService.create(dto, manuscript, this.storage, authorPhotos);
   }
 
   @Public()
@@ -129,7 +150,6 @@ export class SubmissionsController {
     return this.submissionsService.assignEvaluator(id, dto);
   }
 
-  /** GET /submissions/admin/:id/download — URL firmada para descargar el manuscrito */
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Get('admin/:id/download')
@@ -138,7 +158,7 @@ export class SubmissionsController {
     if (!submission.fileUrl) {
       return { url: null, message: 'Esta postulación no tiene archivo adjunto' };
     }
-    const url = await this.storage.getSignedUrl(submission.fileUrl, 60 * 60); // 1 hora
+    const url = await this.storage.getSignedUrl(submission.fileUrl, 60 * 60);
     return { url, fileName: submission.fileName };
   }
 
@@ -153,7 +173,6 @@ export class SubmissionsController {
     return this.submissionsService.sendCustomEmail(id, dto, user);
   }
 
-  /** POST /submissions/admin/bulk-email — correo masivo a postulantes */
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @Post('admin/bulk-email')
@@ -164,7 +183,7 @@ export class SubmissionsController {
     return this.submissionsService.sendBulkEmail(dto, user);
   }
 
-  // ── Foto del autor ponente (solo admin/evaluador, post-aprobación) ──────────
+  // ── Foto del autor — admin/evaluador puede reemplazar post-aprobación ─────
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.EVALUATOR)

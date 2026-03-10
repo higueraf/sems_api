@@ -1,0 +1,49 @@
+# ══════════════════════════════════════════════════════════════════════
+# GitHub Actions — Keep Alive para Render plan gratuito
+# ══════════════════════════════════════════════════════════════════════
+# Guarde este archivo en:
+#   .github/workflows/keep-alive.yml
+#
+# Hace un ping cada 10 minutos usando GitHub Actions (gratis).
+# 500 min/mes en repos privados | 2.000 min/mes en repos públicos.
+# Cada ejecución dura ~5 segundos → consume apenas ~36 min/mes.
+# ══════════════════════════════════════════════════════════════════════
+
+name: Keep Alive — SEMS API
+
+on:
+  schedule:
+    # Cada 10 minutos, las 24 horas, los 7 días
+    # Nota: GitHub Actions tiene latencia de ~1 min en el schedule
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # permite ejecutar manualmente desde GitHub UI
+
+jobs:
+  ping:
+    name: Ping Render Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Ping /api/health/ping
+        run: |
+          echo "🏓 Haciendo ping a SEMS API..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 30 \
+            https://sems-api.onrender.com/api/health/ping)
+
+          echo "HTTP Status: $RESPONSE"
+
+          if [ "$RESPONSE" = "200" ]; then
+            echo "✅ Servicio activo"
+          else
+            echo "⚠️ Respuesta inesperada: $RESPONSE (puede ser cold start)"
+            # No fallamos el workflow — un cold start es esperado ocasionalmente
+          fi
+
+      - name: Ping /api/health (diagnóstico completo)
+        run: |
+          echo "🔍 Verificando estado completo..."
+          curl -s --max-time 30 \
+            https://sems-api.onrender.com/api/health \
+            | python3 -m json.tool || echo "(respuesta no es JSON válido)"
