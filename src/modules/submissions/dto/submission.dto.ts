@@ -152,6 +152,21 @@ export class SendCustomEmailDto {
   body: string;
 }
 
+export class BulkEmailDto {
+  @IsString()
+  subject: string;
+
+  @IsString()
+  body: string;
+
+  @IsUUID()
+  eventId: string;
+
+  @IsString()
+  @IsOptional()
+  status?: string; // undefined = todos los estados
+}
+
 export class AssignEvaluatorDto {
   @IsUUID()
   evaluatorId: string;

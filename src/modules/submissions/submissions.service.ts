@@ -206,8 +206,15 @@ export class SubmissionsService {
       }),
     );
 
+    // Correo en background — no bloquea la respuesta al admin
     if (dto.notifyApplicant !== false) {
-      await this.mailService.sendStatusChanged(submission, newStatus, dto.notes);
+      setImmediate(async () => {
+        try {
+          await this.mailService.sendStatusChanged(submission, newStatus, dto.notes);
+        } catch (err) {
+          this.logger.error(`Error enviando correo de cambio de estado [${id}]: ${err.message}`);
+        }
+      });
     }
 
     return this.findOne(id);
@@ -222,19 +229,87 @@ export class SubmissionsService {
   async sendCustomEmail(id: string, dto: SendCustomEmailDto, user: User) {
     const submission = await this.findOne(id);
     const correspondingAuthor = submission.authors.find((a) => a.isCorresponding) || submission.authors[0];
-
     if (!correspondingAuthor) throw new BadRequestException('No author found for this submission');
 
-    const success = await this.mailService.sendCustomEmail(
-      correspondingAuthor.email,
-      correspondingAuthor.fullName,
-      dto.subject,
-      dto.body,
-      id,
-      user.id,
-    );
+    // Correo individual en background
+    setImmediate(async () => {
+      try {
+        await this.mailService.sendCustomEmail(
+          correspondingAuthor.email,
+          correspondingAuthor.fullName,
+          dto.subject,
+          dto.body,
+          id,
+          user.id,
+        );
+      } catch (err) {
+        this.logger.error(`Error enviando correo personalizado [${id}]: ${err.message}`);
+      }
+    });
 
-    return { success, sentTo: correspondingAuthor.email };
+    return { success: true, sentTo: correspondingAuthor.email };
+  }
+
+  /**
+   * Envío masivo de correos a postulantes.
+   * Filtra por estado si se indica. Responde inmediatamente con el total
+   * a enviar y despacha todos los correos en background con un delay
+   * de 300ms entre cada uno para no saturar Gmail SMTP.
+   */
+  async sendBulkEmail(
+    dto: { subject: string; body: string; status?: string; eventId: string },
+    user: User,
+  ) {
+    const query = this.repo
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('s.authors', 'authors')
+      .leftJoinAndSelect('s.thematicAxis', 'axis')
+      .leftJoinAndSelect('s.productType', 'pt')
+      .where('s.eventId = :eventId', { eventId: dto.eventId });
+
+    if (dto.status) {
+      query.andWhere('s.status = :status', { status: dto.status });
+    }
+
+    const submissions = await query.getMany();
+    const total = submissions.length;
+
+    if (total === 0) {
+      return { queued: 0, message: 'No hay postulaciones que coincidan con el filtro' };
+    }
+
+    // Despachar en background con throttle de 300ms entre correos
+    // para respetar el límite de Gmail (500/día, ~1.7/seg)
+    setImmediate(async () => {
+      let sent = 0;
+      let failed = 0;
+      for (const sub of submissions) {
+        const author = sub.authors.find((a) => a.isCorresponding) || sub.authors[0];
+        if (!author) continue;
+        try {
+          await this.mailService.sendCustomEmail(
+            author.email,
+            author.fullName,
+            dto.subject,
+            dto.body,
+            sub.id,
+            user.id,
+          );
+          sent++;
+        } catch (err) {
+          failed++;
+          this.logger.error(`Bulk email error [${sub.referenceCode}]: ${err.message}`);
+        }
+        // Throttle: 300ms entre correos → máx ~200/min, dentro del límite de Gmail
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      this.logger.log(`📧 Bulk email completado: ${sent} enviados, ${failed} fallidos`);
+    });
+
+    return {
+      queued: total,
+      message: `Envío iniciado para ${total} postulante${total !== 1 ? 's' : ''}. Los correos se despachan en segundo plano.`,
+    };
   }
 
   async getStatusHistory(id: string) {

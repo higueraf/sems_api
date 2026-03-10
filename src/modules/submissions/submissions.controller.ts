@@ -10,7 +10,7 @@ import { SubmissionsService } from './submissions.service';
 import { StorageService } from '../storage/storage.service';
 import {
   CreateSubmissionDto, UpdateSubmissionStatusDto,
-  SendCustomEmailDto, AssignEvaluatorDto,
+  SendCustomEmailDto, AssignEvaluatorDto, BulkEmailDto,
 } from './dto/submission.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -151,6 +151,17 @@ export class SubmissionsController {
     @CurrentUser() user: User,
   ) {
     return this.submissionsService.sendCustomEmail(id, dto, user);
+  }
+
+  /** POST /submissions/admin/bulk-email — correo masivo a postulantes */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('admin/bulk-email')
+  sendBulkEmail(
+    @Body() dto: BulkEmailDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.submissionsService.sendBulkEmail(dto, user);
   }
 
   // ── Foto del autor ponente (solo admin/evaluador, post-aprobación) ──────────
