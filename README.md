@@ -132,6 +132,14 @@ src/
 | GET | `/api/events/:id/guidelines` | Pautas |
 | GET | `/api/events/:id/agenda` | Agenda publicada |
 | POST | `/api/submissions` | Enviar postulación (multipart) |
+| POST | `/api/submissions/:id/email` | Enviar email personalizado |
+| POST | `/api/submissions/:id/email/attachment` | Enviar email con adjunto Word |
+| GET | `/api/submissions/:id/files` | Historial de versiones de documento |
+| POST | `/api/submissions/:id/files` | Subir nueva versión de documento |
+| PATCH | `/api/submissions/admin/files/:fileId/activate` | Establecer versión como oficial |
+| GET | `/api/submissions/admin/files/:fileId/download` | Descargar versión específica |
+| POST | `/api/submissions/authors/:authorId/id-doc` | Reemplazar documento de identidad |
+| GET | `/api/submissions/authors/:authorId/id-doc/download` | Descargar documento de identidad |
 | POST | `/api/submissions/check-by-email` | Verificar estado por email |
 | GET | `/api/countries` | Lista de países |
 | GET | `/api/scientific-product-types` | Tipos de producto |
@@ -163,6 +171,17 @@ received → under_review → revision_requested → received (ciclo de revisió
 
 ## Uploads
 
-Los archivos subidos se guardan en `./uploads/` y se sirven estáticamente en `/uploads/filename`.
+Los archivos se guardan en Backblaze B2 (configurado por variables de entorno) y se sirven mediante URLs firmadas.
 
-Formatos aceptados: `.pdf`, `.doc`, `.docx` (máximo 10 MB).
+### Formatos aceptados:
+
+**Manuscritos**: `.doc`, `.docx` (máximo 15 MB) - Solo Word
+**Fotos de autores**: `.jpg`, `.jpeg`, `.png`, `.webp` (máximo 5 MB)
+**Documentos de identidad**: `.pdf` (máximo 5 MB)
+**Adjuntos en correos**: `.doc`, `.docx` (máximo 10 MB)
+
+### Campos obligatorios en postulaciones:
+
+- **Autores**: Foto, título académico, tipo de correo, email, ORCID, tipo de documento, número de documento
+- **Documento**: Manuscrito en formato Word (obligatorio)
+- **Identificación**: Documento PDF de identidad (obligatorio)

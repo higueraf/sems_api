@@ -8,6 +8,7 @@ import { ScientificProductType } from './scientific-product-type.entity';
 import { Country } from './country.entity';
 import { SubmissionAuthor } from './submission-author.entity';
 import { SubmissionStatusHistory } from './submission-status-history.entity';
+import { SubmissionFile } from './submission-file.entity';
 import { SubmissionStatus } from '../common/enums/submission-status.enum';
 
 @Entity('submissions')
@@ -75,6 +76,8 @@ export class Submission {
   @Column({ nullable: true, type: 'text' })
   bibliography: string;
 
+  // URL del documento ACTIVO/OFICIAL — apunta al archivo más reciente marcado isActive
+  // Se actualiza automáticamente cada vez que se sube una nueva versión
   @Column({ nullable: true })
   fileUrl: string;
 
@@ -114,6 +117,10 @@ export class Submission {
 
   @OneToMany(() => SubmissionStatusHistory, (h) => h.submission, { cascade: true })
   statusHistory: SubmissionStatusHistory[];
+
+  // Historial completo de versiones del documento
+  @OneToMany(() => SubmissionFile, (f) => f.submission, { cascade: true })
+  files: SubmissionFile[];
 
   @CreateDateColumn()
   createdAt: Date;

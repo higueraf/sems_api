@@ -33,6 +33,7 @@ import { Guideline } from './entities/guideline.entity';
 import { Submission } from './entities/submission.entity';
 import { SubmissionAuthor } from './entities/submission-author.entity';
 import { SubmissionStatusHistory } from './entities/submission-status-history.entity';
+import { SubmissionFile } from './entities/submission-file.entity';
 import { AgendaSlot } from './entities/agenda-slot.entity';
 import { EmailLog } from './entities/email-log.entity';
 
@@ -57,7 +58,8 @@ import { EmailLog } from './entities/email-log.entity';
         entities: [
           User, Country, Event, EventPageSection, ScientificProductType,
           ThematicAxis, Organizer, OrganizerMember, Guideline, Submission,
-          SubmissionAuthor, SubmissionStatusHistory, AgendaSlot, EmailLog,
+          SubmissionAuthor, SubmissionStatusHistory, SubmissionFile,
+          AgendaSlot, EmailLog,
         ],
         synchronize: true,
         logging: false,
