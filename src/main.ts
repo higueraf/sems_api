@@ -13,8 +13,13 @@ async function bootstrap() {
   const port        = config.get<number>('port');
   const frontendUrl = config.get<string>('frontendUrl');
 
+  // Procesar frontendUrl como un arreglo separado por comas
+  const allowedOrigins = frontendUrl 
+    ? frontendUrl.split(',').map(url => url.trim())
+    : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
+
   app.enableCors({
-    origin: [frontendUrl, 'http://localhost:5173', 'http://localhost:3000'],
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   });
