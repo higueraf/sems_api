@@ -27,13 +27,16 @@ jobs:
         host: ${{ secrets.VPS_HOST }}
         username: root
         key: ${{ secrets.VPS_KEY }}
+        env:
+          PRODUCTION_ENV: ${{ secrets.ENV_FILE }}
         script: |
           set -e
           cd /opt/sems_api
 
           sudo lsof -t -i:3000 | xargs -r sudo kill -9 || true
 
-          printf "%s" "${{ secrets.ENV_FILE }}" > .env
+          # Utilizamos env para volcar el secreto de manera segura, evitando problemas con bash y caracteres especiales
+          echo "$PRODUCTION_ENV" > .env
 
           # Aseguramos instalar todas las dependencias incluyendo módulos nativos como bcryptjs
           npm install
