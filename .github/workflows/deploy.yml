@@ -40,8 +40,9 @@ jobs:
           echo "$PRODUCTION_ENV" > .env
 
           # Cargar NVM u originar el PATH de Node para sesiones SSH no interactivas
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          source ~/.bashrc || true
+          source ~/.profile || true
+          source /etc/profile || true
 
           # Aseguramos instalar todas las dependencias incluyendo módulos nativos como bcryptjs
           npm install
