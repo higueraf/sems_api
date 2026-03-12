@@ -4,7 +4,6 @@ import {
 import { Response } from 'express';
 import { join, extname } from 'path';
 import { existsSync, createReadStream } from 'fs';
-import { Readable } from 'stream';
 import { StorageService } from './storage.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
@@ -102,6 +101,6 @@ export class LocalFilesController {
       res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
     }
 
-    createReadStream(fullPath).pipe(res);
+    (createReadStream(fullPath) as any).pipe(res);
   }
 }
