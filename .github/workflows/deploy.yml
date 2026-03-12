@@ -23,12 +23,13 @@ jobs:
 
     - name: Run deploy commands on VPS
       uses: appleboy/ssh-action@v1.0.3
+      env:
+        PRODUCTION_ENV: ${{ secrets.ENV_FILE }}
       with:
         host: ${{ secrets.VPS_HOST }}
         username: root
         key: ${{ secrets.VPS_KEY }}
-        env:
-          PRODUCTION_ENV: ${{ secrets.ENV_FILE }}
+        envs: PRODUCTION_ENV
         script: |
           set -e
           cd /opt/sems_api
