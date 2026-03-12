@@ -5,15 +5,40 @@ import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { DataSource } from 'typeorm';
+import { User } from './entities/user.entity';
+import { Country } from './entities/country.entity';
+import { Event } from './entities/event.entity';
+
+async function runSeedIfEmpty(dataSource: DataSource) {
+  try {
+    const userCount = await dataSource.getRepository(User).count();
+    const countryCount = await dataSource.getRepository(Country).count();
+    const eventCount = await dataSource.getRepository(Event).count();
+
+    if (userCount === 0 && countryCount === 0 && eventCount === 0) {
+      console.log('🌱 Base de datos vacía. Ejecutando seed inicial...');
+      const { seed } = await import('./database/seeds/initial-data.seed');
+      await seed(dataSource);
+      console.log('✅ Seed inicial completado exitosamente');
+    } else {
+      console.log('📊 Base de datos ya contiene datos. Omitiendo seed.');
+    }
+  } catch (error) {
+    console.error('❌ Error ejecutando seed:', error);
+  }
+}
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  const config      = app.get(ConfigService);
-  const port        = config.get<number>('port');
+  const config = app.get(ConfigService);
+  const port = config.get<number>('port');
   const frontendUrl = config.get<string>('frontendUrl');
 
-  // Procesar frontendUrl como un arreglo separado por comas
+  const dataSource = app.get(DataSource);
+  await runSeedIfEmpty(dataSource);
+
   const allowedOrigins = frontendUrl 
     ? frontendUrl.split(',').map(url => url.trim())
     : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
