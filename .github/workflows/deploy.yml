@@ -9,49 +9,54 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Copy project to VPS
-      uses: appleboy/scp-action@v0.1.3
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: root
-        key: ${{ secrets.VPS_KEY }}
-        source: "."
-        target: "/opt/sems_api"
+      - name: Copy project to VPS
+        uses: appleboy/scp-action@v0.1.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_KEY }}
+          source: "."
+          target: "/opt/sems_api"
 
-    - name: Run deploy commands on VPS
-      uses: appleboy/ssh-action@v1.0.3
-      env:
-        PRODUCTION_ENV: ${{ secrets.ENV_FILE }}
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: root
-        key: ${{ secrets.VPS_KEY }}
-        envs: PRODUCTION_ENV
-        script: |
-          set -e
-          cd /opt/sems_api
+      - name: Run deploy commands on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          PRODUCTION_ENV: ${{ secrets.ENV_FILE }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_KEY }}
+          envs: PRODUCTION_ENV
+          script: |
+            set -e
+            cd /opt/sems_api
 
-          sudo lsof -t -i:3000 | xargs -r sudo kill -9 || true
+            export PATH="/root/n/bin:$PATH"
 
-          # Utilizamos env para volcar el secreto de manera segura, evitando problemas con bash y caracteres especiales
-          echo "$PRODUCTION_ENV" > .env
+            echo "USER=$(whoami)"
+            echo "HOME=$HOME"
+            echo "PATH=$PATH"
+            which node || true
+            which npm || true
+            node -v || true
+            npm -v || true
 
-          # Cargar NVM u originar el PATH de Node para sesiones SSH no interactivas
-          source ~/.bashrc || true
-          source ~/.profile || true
-          source /etc/profile || true
+            sudo lsof -t -i:3000 | xargs -r sudo kill -9 || true
 
-          # Aseguramos instalar todas las dependencias incluyendo módulos nativos como bcryptjs
-          npm install
-          
-          # Hacemos el build de TypeScript
-          NODE_OPTIONS="--max-old-space-size=4096" npm run build
+            echo "$PRODUCTION_ENV" > .env
 
-          # Reiniciamos el proceso de PM2 con los nuevos cambios
-          pm2 stop sems-api || true
-          pm2 delete sems-api || true
-          pm2 start dist/main.js --name sems-api
-          pm2 save
+            if [ -f package-lock.json ]; then
+              /root/n/bin/npm ci
+            else
+              /root/n/bin/npm install
+            fi
+
+            NODE_OPTIONS="--max-old-space-size=4096" /root/n/bin/npm run build
+
+            pm2 stop sems-api || true
+            pm2 delete sems-api || true
+            pm2 start dist/main.js --name sems-api
+            pm2 save
