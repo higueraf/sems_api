@@ -33,7 +33,6 @@ export class HealthController {
         heapTotalMb: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
       },
       version: process.env.npm_package_version || '1.0.0',
-      testing: "higuera",
     };
   }
 
