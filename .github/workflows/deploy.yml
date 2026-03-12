@@ -1,0 +1,48 @@
+name: 🚀 Deploy NestJS SEMS API to VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Copy project to VPS
+      uses: appleboy/scp-action@v0.1.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: root
+        key: ${{ secrets.VPS_KEY }}
+        source: "."
+        target: "/opt/sems_api"
+
+    - name: Run deploy commands on VPS
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: root
+        key: ${{ secrets.VPS_KEY }}
+        script: |
+          set -e
+          cd /opt/sems_api
+
+          sudo lsof -t -i:3000 | xargs -r sudo kill -9 || true
+
+          printf "%s" "${{ secrets.ENV_FILE }}" > .env
+
+          # Aseguramos instalar todas las dependencias incluyendo módulos nativos como bcryptjs
+          npm install
+          
+          # Hacemos el build de TypeScript
+          NODE_OPTIONS="--max-old-space-size=4096" npm run build
+
+          # Reiniciamos el proceso de PM2 con los nuevos cambios
+          pm2 stop sems-api || true
+          pm2 delete sems-api || true
+          pm2 start dist/main.js --name sems-api
+          pm2 save

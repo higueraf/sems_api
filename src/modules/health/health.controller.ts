@@ -5,7 +5,7 @@ import { DataSource } from 'typeorm';
 
 @Controller('health')
 export class HealthController {
-  constructor(@InjectDataSource() private readonly ds: DataSource) {}
+  constructor(@InjectDataSource() private readonly ds: DataSource) { }
 
   /** GET /api/health — usado por Render, UptimeRobot, y el propio frontend */
   @Public()
@@ -33,6 +33,7 @@ export class HealthController {
         heapTotalMb: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
       },
       version: process.env.npm_package_version || '1.0.0',
+      testing: true,
     };
   }
 
