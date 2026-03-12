@@ -15,7 +15,6 @@ import {
 import { SubmissionStatus } from '../../common/enums/submission-status.enum';
 import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
-import { setImmediate } from 'timers';
 
 const STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
   [SubmissionStatus.RECEIVED]:           [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.WITHDRAWN],

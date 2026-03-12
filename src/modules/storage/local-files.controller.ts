@@ -3,8 +3,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { join, extname } from 'path';
-import { existsSync, createReadStream } from 'fs';
-import { ReadStream } from 'fs';
+import { existsSync, createReadStream } from 'node:fs';
 import { StorageService } from './storage.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
