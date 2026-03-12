@@ -109,7 +109,7 @@ export class SubmissionsService {
     }));
 
     // Background: uploads + correo
-    setImmediate(async () => {
+    setTimeout(async () => {
       // 1. Manuscrito → B2 + crear registro en historial de archivos
       if (file && storage) {
         try {
@@ -416,7 +416,7 @@ export class SubmissionsService {
     }));
 
     if (dto.notifyApplicant !== false) {
-      setImmediate(async () => {
+      setTimeout(async () => {
         try { await this.mailService.sendStatusChanged(submission, newStatus, dto.notes); }
         catch (err) { this.logger.error(`Error correo estado [${id}]: ${err.message}`); }
       });
@@ -442,7 +442,7 @@ export class SubmissionsService {
     const author = submission.authors.find((a) => a.isCorresponding) || submission.authors[0];
     if (!author) throw new BadRequestException('Sin autor para esta postulación');
 
-    setImmediate(async () => {
+    setTimeout(async () => {
       try {
         await this.mailService.sendCustomEmail(
           author.email, author.fullName,
@@ -475,7 +475,7 @@ export class SubmissionsService {
       attachmentName   = dto.attachmentName;
     }
 
-    setImmediate(async () => {
+    setTimeout(async () => {
       let sent = 0; let failed = 0;
       for (const sub of submissions) {
         const author = sub.authors.find((a) => a.isCorresponding) || sub.authors[0];
