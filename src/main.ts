@@ -91,6 +91,10 @@ async function bootstrap() {
     console.log(`📁 Modo disco local activo → ${uploadDir} servido en /uploads`);
   }
 
+  // Aumentar límite del body parser de Express (para uploads)
+  app.use(require('express').json({ limit: '10mb' }));
+  app.use(require('express').urlencoded({ limit: '10mb', extended: true }));
+
   app.setGlobalPrefix('api');
 
   await app.listen(port);

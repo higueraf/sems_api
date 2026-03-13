@@ -60,3 +60,18 @@ jobs:
             pm2 delete sems-api || true
             pm2 start dist/main.js --name sems-api
             pm2 save
+
+            # ── Nginx: aumentar límite de upload a 10MB ─────────────────────
+            NGINX_CONF="/etc/nginx/nginx.conf"
+            if [ -f "$NGINX_CONF" ]; then
+              if ! grep -q "client_max_body_size" "$NGINX_CONF"; then
+                sudo sed -i '/http {/a\    client_max_body_size 10M;' "$NGINX_CONF"
+                echo "✅ client_max_body_size añadido al bloque http"
+              else
+                sudo sed -i 's/client_max_body_size [^;]*/client_max_body_size 10M/' "$NGINX_CONF"
+                echo "✅ client_max_body_size actualizado a 10M"
+              fi
+              sudo nginx -t && sudo systemctl reload nginx && echo "✅ Nginx recargado"
+            else
+              echo "⚠️  nginx.conf no encontrado, omitiendo configuración de Nginx"
+            fi
