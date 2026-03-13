@@ -84,6 +84,12 @@ export class LocalFilesController {
     const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '');
 
     const fullPath = join(this.storage.localUploadDir, safeFolder, safeFilename);
+    
+    // Logging para diagnóstico
+    this.logger.log(`🔍 Buscando archivo: ${fullPath}`);
+    this.logger.log(`📂 UploadDir: ${this.storage.localUploadDir}`);
+    this.logger.log(`📁 Folder: ${safeFolder}, File: ${safeFilename}`);
+    this.logger.log(`🔍 Existe: ${existsSync(fullPath)}`);
 
     if (!existsSync(fullPath)) {
       this.logger.warn(`Archivo no encontrado: ${fullPath}`);
