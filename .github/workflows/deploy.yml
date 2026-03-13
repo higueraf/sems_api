@@ -46,7 +46,7 @@ jobs:
 
             sudo lsof -t -i:3000 | xargs -r sudo kill -9 || true
 
-            echo "$PRODUCTION_ENV" > .env
+            printf '%s' "$PRODUCTION_ENV" > .env
 
             if [ -f package-lock.json ]; then
               /root/n/bin/npm ci
