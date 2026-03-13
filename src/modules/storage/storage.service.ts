@@ -55,7 +55,7 @@ const PUBLIC_FOLDERS = new Set<StorageFolder>(['logos', 'photos', 'guidelines'])
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg']);
 
 /** Prefijo interno para referencias a disco local */
-const LOCAL_PREFIX = 'local://';
+const LOCAL_PREFIX = '/uploads/';
 
 @Injectable()
 export class StorageService {
