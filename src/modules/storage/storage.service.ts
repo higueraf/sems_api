@@ -109,7 +109,7 @@ export class StorageService {
     const rawDest  = this.cfg.get<string>('upload.dest') || './uploads';
     // Resolvemos relativo al CWD (donde se ejecuta el proceso Node)
     this.uploadDir = rawDest.startsWith('/') ? rawDest : join(process.cwd(), rawDest);
-    this.appUrl    = (this.cfg.get<string>('appUrl') || 'http://localhost:3000').replace(/\/$/, '');
+    this.appUrl    = (this.cfg.get<string>('appUrl') || 'http://localhost:3000').replace(/\/+$/, '');
 
     // Crear subcarpetas si no existen
     const folders: StorageFolder[] = ['logos', 'photos', 'submissions', 'guidelines', 'identity-docs'];
@@ -299,6 +299,19 @@ export class StorageService {
     return join(this.uploadDir, relativePath);
   }
 
+  private normalizeUrl(url: string): string {
+    // Corregir dobles slashes
+    url = url.replace(/\/+/g, '/');
+    
+    // Corregir dominios sin punto (xyzlocal -> xyz.local)
+    url = url.replace(/(\w+)local/g, '$1.local');
+    
+    // Asegurar que no haya protocolos duplicados
+    url = url.replace(/(https?:\/\/)+/g, '$1');
+    
+    return url;
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // getSignedUrl — punto único de resolución de URLs
   // ════════════════════════════════════════════════════════════════════════════
@@ -316,8 +329,15 @@ export class StorageService {
   async getSignedUrl(ref: string, _expiresIn = 3600): Promise<string> {
     if (!ref) return ref;
 
+    // Logging para diagnóstico
+    this.logger.log(`🔗 Resolviendo URL para referencia: ${ref}`);
+    this.logger.log(`🌐 APP_URL configurada: ${this.appUrl}`);
+
     // ── Cloudinary / cualquier URL https pública ─────────────────────────────
-    if (ref.startsWith('http://') || ref.startsWith('https://')) return ref;
+    if (ref.startsWith('http://') || ref.startsWith('https://')) {
+      this.logger.log(`✅ URL pública detectada: ${ref}`);
+      return ref;
+    }
 
     // ── Backblaze B2 ─────────────────────────────────────────────────────────
     if (ref.startsWith('b2://')) {
@@ -336,11 +356,25 @@ export class StorageService {
       const folder       = relativePath.split('/')[0] as StorageFolder;
       const isPublic     = PUBLIC_FOLDERS.has(folder);
       const visibility   = isPublic ? 'public' : 'private';
-      return `${this.appUrl}/api/local-files/${visibility}/${relativePath}`;
+      
+      // Construir URL segura sin dobles slashes y con normalización
+      const baseUrl = this.normalizeUrl(this.appUrl);
+      const urlPath = `/api/local-files/${visibility}/${relativePath}`.replace(/\/+/g, '/');
+      const finalUrl = `${baseUrl}${urlPath}`;
+      
+      this.logger.log(`📁 URL local generada: ${finalUrl}`);
+      this.logger.log(`📂 Base URL normalizada: ${baseUrl}`);
+      this.logger.log(`📂 Visibility: ${visibility}, Path: ${relativePath}`);
+      
+      return finalUrl;
     }
 
     // ── Referencia legada /uploads/... (sin prefijo local://) ────────────────
-    if (ref.startsWith('/uploads/')) return `${this.appUrl}${ref}`;
+    if (ref.startsWith('/uploads/')) {
+      const baseUrl = this.normalizeUrl(this.appUrl);
+      const cleanRef = ref.replace(/\/+/g, '/');
+      return `${baseUrl}${cleanRef}`;
+    }
 
     return ref;
   }
