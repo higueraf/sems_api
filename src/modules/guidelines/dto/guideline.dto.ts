@@ -26,6 +26,10 @@ export class CreateGuidelineDto {
   @IsBoolean()
   @IsOptional()
   isVisible?: boolean;
+
+  @IsUUID()
+  @IsOptional()
+  productTypeId?: string | null;
 }
 
 export class UpdateGuidelineDto extends CreateGuidelineDto {}

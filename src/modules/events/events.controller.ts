@@ -1,8 +1,8 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query,
+  Controller, Get, Post, Patch, Delete, Param, Body, UseGuards,
 } from '@nestjs/common';
 import { EventsService } from './events.service';
-import { CreateEventDto, UpdateEventDto } from './dto/event.dto';
+import { CreateEventDto, UpdateEventDto, CreateEventVideoDto, UpdateEventVideoDto } from './dto/event.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -14,17 +14,35 @@ import { Public } from '../../common/decorators/public.decorator';
 export class EventsController {
   constructor(private readonly eventsService: EventsService) {}
 
+  // ── Públicos ────────────────────────────────────────────────────────────────
+
   @Public()
   @Get('active')
   findActive() {
     return this.eventsService.findActive();
   }
 
+  /** Simposios anteriores (no activos) con sus videos — usado en /simposios */
+  @Public()
+  @Get('previous')
+  findPrevious() {
+    return this.eventsService.findPrevious();
+  }
+
+  /** Talleres anteriores (no activos) con sus videos — usado en /talleres */
+  @Public()
+  @Get('workshops')
+  findPreviousWorkshops() {
+    return this.eventsService.findPreviousWorkshops();
+  }
+
   @Public()
   @Get(':id/public')
-  findOne(@Param('id') id: string) {
+  findOnePublic(@Param('id') id: string) {
     return this.eventsService.findOne(id, true);
   }
+
+  // ── Admin ───────────────────────────────────────────────────────────────────
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
@@ -73,5 +91,38 @@ export class EventsController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.eventsService.remove(id);
+  }
+
+  // ── Gestión de Videos YouTube ────────────────────────────────────────────────
+
+  /** GET  /events/:id/videos — lista videos del evento (público) */
+  @Public()
+  @Get(':id/videos')
+  findVideos(@Param('id') id: string) {
+    return this.eventsService.findVideos(id);
+  }
+
+  /** POST /events/:id/videos — agrega video (admin) */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/videos')
+  addVideo(@Param('id') id: string, @Body() dto: CreateEventVideoDto) {
+    return this.eventsService.addVideo(id, dto);
+  }
+
+  /** PATCH /events/videos/:videoId — edita video (admin) */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Patch('videos/:videoId')
+  updateVideo(@Param('videoId') videoId: string, @Body() dto: UpdateEventVideoDto) {
+    return this.eventsService.updateVideo(videoId, dto);
+  }
+
+  /** DELETE /events/videos/:videoId — elimina video (admin) */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Delete('videos/:videoId')
+  removeVideo(@Param('videoId') videoId: string) {
+    return this.eventsService.removeVideo(videoId);
   }
 }

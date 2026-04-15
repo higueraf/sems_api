@@ -68,7 +68,7 @@ export class SubmissionsController {
   @UseInterceptors(
     AnyFilesInterceptor({
       storage: memoryStorage(),
-      limits: { fileSize: 15 * 1024 * 1024 },
+      limits: { fileSize: 20 * 1024 * 1024 },
     }),
     new ParseJsonFieldsInterceptor('authors', 'productTypeIds'),
   )
@@ -76,11 +76,13 @@ export class SubmissionsController {
     @Body() dto: CreateSubmissionDto,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    const all          = files ?? [];
-    const manuscript   = all.find(f => f.fieldname === 'file');
-    const authorPhotos = all.filter(f => f.fieldname.startsWith('authorPhoto_'));
-    const authorIdDocs = all.filter(f => f.fieldname.startsWith('authorIdDoc_'));
-    return this.service.create(dto, manuscript, this.storage, authorPhotos, authorIdDocs);
+    const all           = files ?? [];
+    const manuscript    = all.find(f => f.fieldname === 'file');
+    const authorPhotos  = all.filter(f => f.fieldname.startsWith('authorPhoto_'));
+    const authorIdDocs  = all.filter(f => f.fieldname.startsWith('authorIdDoc_'));
+    // Archivos por tipo de producto: fieldname = "productFile_{productTypeId}"
+    const productFiles  = all.filter(f => f.fieldname.startsWith('productFile_'));
+    return this.service.create(dto, manuscript, this.storage, authorPhotos, authorIdDocs, productFiles);
   }
 
   @Public()
@@ -166,27 +168,29 @@ export class SubmissionsController {
 
   /**
    * POST /api/submissions/admin/:id/files — sube nueva versión del documento.
-   * La nueva versión queda automáticamente como oficial/activa.
-   * Body (multipart): file (Word), fileType?, notes?
+   * La nueva versión queda automáticamente como oficial/activa para su tipo de producto.
+   * Body (multipart): file, fileType?, notes?, productTypeId?
    */
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @Post('admin/:id/files')
   @UseInterceptors(FileInterceptor('file', {
     storage: memoryStorage(),
-    limits: { fileSize: 15 * 1024 * 1024 },
+    limits: { fileSize: 20 * 1024 * 1024 },
   }))
   async addFileVersion(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @Body('fileType') fileType: SubmissionFileType,
     @Body('notes') notes: string,
+    @Body('productTypeId') productTypeId: string,
     @CurrentUser() user: User,
   ) {
     return this.service.addFileVersion(
       id, file, this.storage, user.id,
       fileType || SubmissionFileType.CORRECTION,
       notes,
+      productTypeId || undefined,
     );
   }
 

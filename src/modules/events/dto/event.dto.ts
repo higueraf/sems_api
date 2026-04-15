@@ -89,3 +89,21 @@ export class CreateEventDto {
 }
 
 export class UpdateEventDto extends CreateEventDto {}
+
+export class CreateEventVideoDto {
+  @IsString()
+  title: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  youtubeUrl: string;
+
+  @IsNumber()
+  @IsOptional()
+  displayOrder?: number;
+}
+
+export class UpdateEventVideoDto extends CreateEventVideoDto {}

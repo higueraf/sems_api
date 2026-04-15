@@ -36,6 +36,7 @@ import { SubmissionStatusHistory } from './entities/submission-status-history.en
 import { SubmissionFile } from './entities/submission-file.entity';
 import { AgendaSlot } from './entities/agenda-slot.entity';
 import { EmailLog } from './entities/email-log.entity';
+import { EventVideo } from './entities/event-video.entity';
 
 @Module({
   imports: [
@@ -52,11 +53,11 @@ import { EmailLog } from './entities/email-log.entity';
         username: config.get<string>('database.username'),
         password: config.get<string>('database.password'),
         database: config.get<string>('database.name'),
-        ssl: config.get<boolean>('database.ssl')
-          ? { rejectUnauthorized: false }
-          : false,
+        //ssl: config.get<boolean>('database.ssl')
+          //? { rejectUnauthorized: false }
+          //: false,
         entities: [
-          User, Country, Event, EventPageSection, ScientificProductType,
+          User, Country, Event, EventVideo, EventPageSection, ScientificProductType,
           ThematicAxis, Organizer, OrganizerMember, Guideline, Submission,
           SubmissionAuthor, SubmissionStatusHistory, SubmissionFile,
           AgendaSlot, EmailLog,

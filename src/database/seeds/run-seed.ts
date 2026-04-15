@@ -15,6 +15,7 @@ import { SubmissionStatusHistory } from '../../entities/submission-status-histor
 import { SubmissionFile } from '../../entities/submission-file.entity';
 import { AgendaSlot } from '../../entities/agenda-slot.entity';
 import { EmailLog } from '../../entities/email-log.entity';
+import { EventVideo } from '../../entities/event-video.entity';
 
 dotenv.config();
 
@@ -26,7 +27,7 @@ const dataSource = new DataSource({
   password: process.env.DB_PASS || 'postgres',
   database: process.env.DB_NAME || 'sems_db',
   entities: [
-    User, Country, Event, EventPageSection, ScientificProductType,
+    User, Country, Event, EventVideo, EventPageSection, ScientificProductType,
     ThematicAxis, Organizer, Guideline, Submission, SubmissionAuthor,
     SubmissionStatusHistory, SubmissionFile, AgendaSlot, EmailLog,
   ],

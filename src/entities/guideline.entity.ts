@@ -3,6 +3,7 @@ import {
   JoinColumn, CreateDateColumn, UpdateDateColumn,
 } from 'typeorm';
 import { Event } from './event.entity';
+import { ScientificProductType } from './scientific-product-type.entity';
 import { GuidelineCategory } from '../common/enums/submission-status.enum';
 
 @Entity('guidelines')
@@ -16,6 +17,14 @@ export class Guideline {
 
   @Column()
   eventId: string;
+
+  /** Tipo de producto científico al que pertenece esta pauta (1:1 por evento). */
+  @ManyToOne(() => ScientificProductType, { nullable: true, onDelete: 'SET NULL', eager: true })
+  @JoinColumn({ name: 'productTypeId' })
+  productType: ScientificProductType | null;
+
+  @Column({ nullable: true })
+  productTypeId: string | null;
 
   @Column()
   title: string;

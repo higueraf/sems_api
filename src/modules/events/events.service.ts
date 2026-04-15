@@ -2,14 +2,42 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Event } from '../../entities/event.entity';
-import { CreateEventDto, UpdateEventDto } from './dto/event.dto';
+import { EventVideo } from '../../entities/event-video.entity';
+import { CreateEventDto, UpdateEventDto, CreateEventVideoDto, UpdateEventVideoDto } from './dto/event.dto';
 
 @Injectable()
 export class EventsService {
-  constructor(@InjectRepository(Event) private repo: Repository<Event>) {}
+  constructor(
+    @InjectRepository(Event) private repo: Repository<Event>,
+    @InjectRepository(EventVideo) private videoRepo: Repository<EventVideo>,
+  ) {}
 
   findAll() {
     return this.repo.find({ order: { startDate: 'DESC' } });
+  }
+
+  /** Simposios anteriores (no activos, categoría symposium) con sus videos — público */
+  findPrevious() {
+    return this.repo
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.videos', 'videos')
+      .where('event.isActive = false')
+      .andWhere("(event.category = 'symposium' OR event.category IS NULL)")
+      .orderBy('event.startDate', 'DESC')
+      .addOrderBy('videos.displayOrder', 'ASC')
+      .getMany();
+  }
+
+  /** Talleres anteriores (no activos, categoría workshop) con sus videos — público */
+  findPreviousWorkshops() {
+    return this.repo
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.videos', 'videos')
+      .where('event.isActive = false')
+      .andWhere("event.category = 'workshop'")
+      .orderBy('event.startDate', 'DESC')
+      .addOrderBy('videos.displayOrder', 'ASC')
+      .getMany();
   }
 
   async findActive() {
@@ -35,7 +63,7 @@ export class EventsService {
 
   async findOne(id: string, withRelations = false) {
     const relations = withRelations
-      ? ['pageSections', 'thematicAxes', 'organizers', 'guidelines']
+      ? ['pageSections', 'thematicAxes', 'organizers', 'guidelines', 'videos']
       : [];
     const event = await this.repo.findOne({ where: { id }, relations });
     if (!event) throw new NotFoundException('Event not found');
@@ -69,5 +97,42 @@ export class EventsService {
     const event = await this.findOne(id);
     await this.repo.remove(event);
     return { message: 'Event deleted' };
+  }
+
+  // ── Gestión de videos YouTube ──────────────────────────────────────────────
+
+  /** Lista videos de un evento ordenados por displayOrder */
+  findVideos(eventId: string) {
+    return this.videoRepo.find({
+      where: { eventId },
+      order: { displayOrder: 'ASC', createdAt: 'ASC' },
+    });
+  }
+
+  /** Añade un video a un evento */
+  async addVideo(eventId: string, dto: CreateEventVideoDto): Promise<EventVideo> {
+    await this.findOne(eventId);
+    if (dto.displayOrder === undefined) {
+      const count = await this.videoRepo.count({ where: { eventId } });
+      dto.displayOrder = count;
+    }
+    const video = this.videoRepo.create({ ...dto, eventId });
+    return this.videoRepo.save(video);
+  }
+
+  /** Actualiza un video existente */
+  async updateVideo(videoId: string, dto: UpdateEventVideoDto): Promise<EventVideo> {
+    const video = await this.videoRepo.findOne({ where: { id: videoId } });
+    if (!video) throw new NotFoundException('Video not found');
+    Object.assign(video, dto);
+    return this.videoRepo.save(video);
+  }
+
+  /** Elimina un video */
+  async removeVideo(videoId: string): Promise<{ message: string }> {
+    const video = await this.videoRepo.findOne({ where: { id: videoId } });
+    if (!video) throw new NotFoundException('Video not found');
+    await this.videoRepo.remove(video);
+    return { message: 'Video deleted' };
   }
 }

@@ -76,6 +76,14 @@ export class CreateSubmissionDto {
   @IsUUID()
   productTypeId: string;
 
+  /**
+   * IDs de todos los tipos de producto científico seleccionados.
+   * Se serializa como JSON desde el frontend (multipart/form-data).
+   */
+  @IsArray()
+  @IsOptional()
+  productTypeIds?: string[];
+
   @IsString()
   titleEs: string;
 

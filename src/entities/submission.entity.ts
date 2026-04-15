@@ -40,6 +40,13 @@ export class Submission {
   @Column()
   productTypeId: string;
 
+  /**
+   * IDs de todos los tipos de producto científico seleccionados.
+   * productTypeId apunta al primero (por compatibilidad).
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  productTypeIds: string[];
+
   @Column()
   titleEs: string;
 

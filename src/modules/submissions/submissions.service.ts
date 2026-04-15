@@ -2,11 +2,12 @@ import {
   Injectable, NotFoundException, BadRequestException, Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Submission } from '../../entities/submission.entity';
 import { SubmissionAuthor } from '../../entities/submission-author.entity';
 import { SubmissionStatusHistory } from '../../entities/submission-status-history.entity';
 import { SubmissionFile, SubmissionFileType } from '../../entities/submission-file.entity';
+import { ScientificProductType } from '../../entities/scientific-product-type.entity';
 import { User } from '../../entities/user.entity';
 import {
   CreateSubmissionDto, UpdateSubmissionStatusDto,
@@ -30,8 +31,24 @@ const ALLOWED_WORD_MIME = [
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
+const ALLOWED_PPT_MIME = [
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+];
 const ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_PDF_MIME   = ['application/pdf'];
+const MAX_PRODUCT_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
+/** Devuelve los MIME types permitidos según el campo allowedFileFormats del tipo de producto. */
+function getAllowedMimesForFormats(formats?: string): string[] {
+  if (!formats) return ALLOWED_WORD_MIME;
+  const fmts = formats.split(',').map(f => f.trim().toLowerCase());
+  const mimes: string[] = [];
+  if (fmts.includes('docx') || fmts.includes('doc'))  mimes.push(...ALLOWED_WORD_MIME);
+  if (fmts.includes('pptx') || fmts.includes('ppt'))  mimes.push(...ALLOWED_PPT_MIME);
+  if (fmts.includes('pdf'))                            mimes.push(...ALLOWED_PDF_MIME);
+  return mimes.length ? mimes : ALLOWED_WORD_MIME;
+}
 
 @Injectable()
 export class SubmissionsService {
@@ -42,6 +59,7 @@ export class SubmissionsService {
     @InjectRepository(SubmissionAuthor)         private authorRepo: Repository<SubmissionAuthor>,
     @InjectRepository(SubmissionStatusHistory)  private historyRepo: Repository<SubmissionStatusHistory>,
     @InjectRepository(SubmissionFile)           private fileRepo: Repository<SubmissionFile>,
+    @InjectRepository(ScientificProductType)    private productTypeRepo: Repository<ScientificProductType>,
     private mailService: MailService,
   ) {}
 
@@ -59,8 +77,34 @@ export class SubmissionsService {
     storage?: StorageService,
     authorPhotos: Express.Multer.File[] = [],
     authorIdDocs: Express.Multer.File[] = [],
+    /** Archivos por tipo de producto: clave = productTypeId, valor = archivo */
+    productFiles: Express.Multer.File[] = [],
   ) {
-    // Validar manuscrito — solo Word
+    // Validar archivos por tipo de producto
+    if (productFiles.length > 0) {
+      const productTypeIds = productFiles
+        .map(f => f.fieldname.replace('productFile_', ''))
+        .filter(Boolean);
+      const productTypes = productTypeIds.length
+        ? await this.productTypeRepo.findBy({ id: In(productTypeIds) })
+        : [];
+
+      for (const pf of productFiles) {
+        const ptId = pf.fieldname.replace('productFile_', '');
+        const pt   = productTypes.find(p => p.id === ptId);
+        const allowed = getAllowedMimesForFormats(pt?.allowedFileFormats);
+        if (pf.size > MAX_PRODUCT_FILE_SIZE)
+          throw new BadRequestException(`El archivo "${pf.originalname}" supera 20 MB`);
+        if (!allowed.includes(pf.mimetype)) {
+          const fmts = pt?.allowedFileFormats || 'docx';
+          throw new BadRequestException(
+            `El archivo "${pf.originalname}" no es un formato válido para "${pt?.name ?? ptId}". Formatos permitidos: ${fmts}`,
+          );
+        }
+      }
+    }
+
+    // Compatibilidad: validar manuscrito legacy — solo Word
     if (file) {
       if (file.size > 15 * 1024 * 1024)
         throw new BadRequestException('El manuscrito no debe superar 15 MB');
@@ -93,12 +137,24 @@ export class SubmissionsService {
       if (!existing) isUnique = true;
     }
 
+    // productTypeIds: usar los del DTO o construir desde productTypeId
+    const allProductTypeIds = dto.productTypeIds?.length
+      ? dto.productTypeIds
+      : [dto.productTypeId];
+
+    // Archivo principal (legacy): primer archivo por tipo de producto o el 'file' legacy
+    const primaryProductFile = productFiles.find(
+      f => f.fieldname === `productFile_${dto.productTypeId}`,
+    ) ?? productFiles[0];
+    const primaryFile = primaryProductFile ?? file;
+
     // Guardar submission en BD
     const submission = this.repo.create({
       ...dto,
       referenceCode,
+      productTypeIds: allProductTypeIds,
       status: SubmissionStatus.RECEIVED,
-      ...(file && { fileName: file.originalname }),
+      ...(primaryFile && { fileName: primaryFile.originalname }),
     });
     const saved = await this.repo.save(submission);
 
@@ -110,11 +166,63 @@ export class SubmissionsService {
 
     // Background: uploads + correo
     setTimeout(async () => {
-      // 1. Manuscrito → B2 + crear registro en historial de archivos
-      if (file && storage) {
+      // 1. Archivos por tipo de producto científico
+      if (productFiles.length > 0 && storage) {
+        try {
+          // Cargar datos de tipos de producto para obtener nombre y formatos
+          const ptIds = productFiles
+            .map(f => f.fieldname.replace('productFile_', ''))
+            .filter(Boolean);
+          const productTypes = await this.productTypeRepo.findBy({ id: In(ptIds) });
+          const ptMap = Object.fromEntries(productTypes.map(p => [p.id, p]));
+
+          let primaryFileUrl: string | null = null;
+          let primaryFileName: string | null = null;
+
+          for (const pf of productFiles) {
+            const ptId = pf.fieldname.replace('productFile_', '');
+            const pt   = ptMap[ptId];
+            try {
+              const slug    = (pt?.name ?? ptId).replace(/\s+/g, '-').toLowerCase();
+              const fileUrl = await storage.upload(
+                pf, 'submissions',
+                `${slug}-${referenceCode}-v1`,
+              );
+              await this.fileRepo.save(this.fileRepo.create({
+                submissionId:  saved.id,
+                fileUrl,
+                fileName:      pf.originalname,
+                fileSize:      pf.size,
+                fileType:      SubmissionFileType.MANUSCRIPT,
+                version:       1,
+                isActive:      true,
+                productTypeId: ptId,
+                productTypeName: pt?.name ?? ptId,
+                notes:         'Versión inicial — enviada por el postulante',
+              }));
+              // El primer archivo (tipo de producto principal) se guarda como referencia
+              if (ptId === dto.productTypeId || primaryFileUrl === null) {
+                primaryFileUrl  = fileUrl;
+                primaryFileName = pf.originalname;
+              }
+              this.logger.log(`📄 Archivo v1 [${pt?.name ?? ptId}] subido: ${fileUrl}`);
+            } catch (err) {
+              this.logger.error(`Error subiendo archivo [${pt?.name ?? ptId}] [${referenceCode}]: ${err.message}`);
+            }
+          }
+
+          if (primaryFileUrl) {
+            await this.repo.update(saved.id, { fileUrl: primaryFileUrl, fileName: primaryFileName });
+          }
+        } catch (err) {
+          this.logger.error(`Error procesando archivos de producto [${referenceCode}]: ${err.message}`);
+        }
+      }
+
+      // 1b. Manuscrito legacy (compatibilidad con flujo anterior)
+      if (!productFiles.length && file && storage) {
         try {
           const fileUrl = await storage.upload(file, 'submissions', `manuscript-${referenceCode}-v1`);
-          // Crear entrada en historial (versión 1, activa)
           await this.fileRepo.save(this.fileRepo.create({
             submissionId: saved.id,
             fileUrl,
@@ -125,7 +233,6 @@ export class SubmissionsService {
             isActive: true,
             notes: 'Versión inicial — enviada por el postulante',
           }));
-          // Actualizar referencia activa en la submission
           await this.repo.update(saved.id, { fileUrl, fileName: file.originalname });
           this.logger.log(`📄 Manuscrito v1 subido: ${fileUrl}`);
         } catch (err) {
@@ -256,8 +363,8 @@ export class SubmissionsService {
 
   /**
    * Sube una nueva versión del documento desde el dashboard admin.
-   * La nueva versión se marca automáticamente como activa (oficial),
-   * y todas las anteriores se desmarcan.
+   * La nueva versión se marca automáticamente como activa (oficial) para su tipo de producto.
+   * Si productTypeId es null, opera en modo legacy (una sola versión global).
    */
   async addFileVersion(
     submissionId: string,
@@ -266,31 +373,61 @@ export class SubmissionsService {
     uploadedById: string,
     fileType: SubmissionFileType = SubmissionFileType.CORRECTION,
     notes?: string,
+    productTypeId?: string,
   ): Promise<SubmissionFile> {
-    // Validar — solo Word
-    if (!ALLOWED_WORD_MIME.includes(file.mimetype))
-      throw new BadRequestException('Solo se aceptan documentos Word (.doc / .docx)');
-    if (file.size > 15 * 1024 * 1024)
-      throw new BadRequestException('El archivo no debe superar 15 MB');
+    // Determinar formatos permitidos según el tipo de producto
+    let pt: ScientificProductType | null = null;
+    if (productTypeId) {
+      pt = await this.productTypeRepo.findOne({ where: { id: productTypeId } });
+    }
+    const allowedMimes = getAllowedMimesForFormats(pt?.allowedFileFormats);
+
+    if (!allowedMimes.includes(file.mimetype)) {
+      const fmts = pt?.allowedFileFormats || 'docx';
+      throw new BadRequestException(
+        `El archivo no es un formato válido para "${pt?.name ?? 'este tipo de producto'}". Formatos permitidos: ${fmts}`,
+      );
+    }
+    if (file.size > MAX_PRODUCT_FILE_SIZE)
+      throw new BadRequestException('El archivo no debe superar 20 MB');
 
     const submission = await this.repo.findOne({ where: { id: submissionId } });
     if (!submission) throw new NotFoundException('Submission not found');
 
-    // Siguiente número de versión
+    // Siguiente número de versión — contado por productTypeId si aplica
+    const lastFileQuery: any = { submissionId };
+    if (productTypeId) lastFileQuery.productTypeId = productTypeId;
+
     const lastFile = await this.fileRepo.findOne({
-      where: { submissionId },
+      where: lastFileQuery,
       order: { version: 'DESC' },
     });
     const nextVersion = (lastFile?.version ?? 0) + 1;
 
+    // Slug del tipo de producto para el nombre del archivo en B2
+    const slug = pt?.name
+      ? pt.name.replace(/\s+/g, '-').toLowerCase()
+      : 'manuscrito';
+
     // Subir a B2
     const fileUrl = await storage.upload(
       file, 'submissions',
-      `manuscript-${submission.referenceCode}-v${nextVersion}`,
+      `${slug}-${submission.referenceCode}-v${nextVersion}`,
     );
 
-    // Desmarcar versión activa anterior
-    await this.fileRepo.update({ submissionId, isActive: true }, { isActive: false });
+    // Desmarcar versión activa anterior del mismo tipo de producto
+    if (productTypeId) {
+      await this.fileRepo.update(
+        { submissionId, productTypeId, isActive: true },
+        { isActive: false },
+      );
+    } else {
+      // Modo legacy: desmarcar todas las activas sin productTypeId
+      await this.fileRepo.update(
+        { submissionId, isActive: true },
+        { isActive: false },
+      );
+    }
 
     // Crear nuevo registro de versión (activa)
     const newFile = await this.fileRepo.save(this.fileRepo.create({
@@ -301,19 +438,25 @@ export class SubmissionsService {
       fileType,
       version: nextVersion,
       isActive: true,
+      productTypeId: productTypeId ?? null,
+      productTypeName: pt?.name ?? null,
       notes: notes || `Versión ${nextVersion} subida desde el dashboard`,
       uploadedById,
     }));
 
-    // Actualizar referencia oficial en la submission
-    await this.repo.update(submissionId, { fileUrl, fileName: file.originalname });
+    // Actualizar referencia oficial en la submission si es el tipo principal
+    if (!productTypeId || productTypeId === submission.productTypeId) {
+      await this.repo.update(submissionId, { fileUrl, fileName: file.originalname });
+    }
 
-    this.logger.log(`📄 Nueva versión v${nextVersion} subida para ${submission.referenceCode}`);
+    this.logger.log(
+      `📄 Nueva versión v${nextVersion} [${pt?.name ?? 'legacy'}] subida para ${submission.referenceCode}`,
+    );
     return newFile;
   }
 
   /**
-   * Promueve una versión existente a oficial (activa).
+   * Promueve una versión existente a oficial (activa) dentro de su tipo de producto.
    * Útil si el admin quiere volver a una versión anterior.
    */
   async setActiveFileVersion(
@@ -323,15 +466,25 @@ export class SubmissionsService {
     const file = await this.fileRepo.findOne({ where: { id: fileId, submissionId } });
     if (!file) throw new NotFoundException('Versión de archivo no encontrada');
 
-    // Desmarcar todas las activas
-    await this.fileRepo.update({ submissionId, isActive: true }, { isActive: false });
+    // Desmarcar activas del mismo tipo de producto
+    if (file.productTypeId) {
+      await this.fileRepo.update(
+        { submissionId, productTypeId: file.productTypeId, isActive: true },
+        { isActive: false },
+      );
+    } else {
+      await this.fileRepo.update({ submissionId, isActive: true }, { isActive: false });
+    }
 
     // Marcar la elegida como activa
     file.isActive = true;
     await this.fileRepo.save(file);
 
-    // Actualizar referencia en submission
-    await this.repo.update(submissionId, { fileUrl: file.fileUrl, fileName: file.fileName });
+    // Actualizar referencia en submission si es el tipo principal
+    const submission = await this.repo.findOne({ where: { id: submissionId } });
+    if (!file.productTypeId || file.productTypeId === submission?.productTypeId) {
+      await this.repo.update(submissionId, { fileUrl: file.fileUrl, fileName: file.fileName });
+    }
 
     return file;
   }

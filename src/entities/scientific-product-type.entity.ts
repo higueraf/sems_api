@@ -37,6 +37,15 @@ export class ScientificProductType {
   @Column({ default: true })
   requiresFile: boolean;
 
+  /**
+   * Formatos de archivo permitidos para este tipo de producto.
+   * Valores separados por coma: "docx", "pptx", "pdf"
+   * Ejemplo: "docx,pdf" o "pptx" o "docx,pptx,pdf"
+   * Null significa solo Word (comportamiento legacy).
+   */
+  @Column({ nullable: true, type: 'text' })
+  allowedFileFormats: string;
+
   @Column({ default: true })
   isActive: boolean;
 

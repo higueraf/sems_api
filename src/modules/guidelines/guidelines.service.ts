@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { Guideline } from '../../entities/guideline.entity';
 import { CreateGuidelineDto, UpdateGuidelineDto } from './dto/guideline.dto';
 import { StorageService } from '../storage/storage.service';
@@ -25,12 +25,35 @@ export class GuidelinesService {
     return item;
   }
 
+  /** Valida que no exista ya una pauta con el mismo productTypeId en el mismo evento. */
+  private async assertProductTypeUnique(
+    eventId: string,
+    productTypeId: string | null | undefined,
+    excludeId?: string,
+  ) {
+    if (!productTypeId) return;
+    const conflict = await this.repo.findOne({
+      where: {
+        eventId,
+        productTypeId,
+        ...(excludeId ? { id: Not(excludeId) } : {}),
+      },
+    });
+    if (conflict) {
+      throw new ConflictException(
+        `Ya existe una pauta asignada a este tipo de producto científico.`,
+      );
+    }
+  }
+
   async create(dto: CreateGuidelineDto) {
+    await this.assertProductTypeUnique(dto.eventId, dto.productTypeId);
     return this.repo.save(this.repo.create(dto));
   }
 
   async update(id: string, dto: UpdateGuidelineDto) {
     const item = await this.findOne(id);
+    await this.assertProductTypeUnique(dto.eventId ?? item.eventId, dto.productTypeId, id);
     Object.assign(item, dto);
     return this.repo.save(item);
   }

@@ -13,6 +13,7 @@ import { Organizer } from './organizer.entity';
 import { Guideline } from './guideline.entity';
 import { Submission } from './submission.entity';
 import { AgendaSlot } from './agenda-slot.entity';
+import { EventVideo } from './event-video.entity';
 
 @Entity('events')
 export class Event {
@@ -48,6 +49,13 @@ export class Event {
 
   @Column({ type: 'enum', enum: EventFormat, default: EventFormat.HYBRID })
   format: EventFormat;
+
+  /**
+   * Categoría del evento: 'symposium' (simposio) | 'workshop' (taller)
+   * Permite distinguir entre simposios y talleres en las páginas públicas.
+   */
+  @Column({ default: 'symposium' })
+  category: string;
 
   @Column({ nullable: true })
   registrationUrl: string;
@@ -102,6 +110,9 @@ export class Event {
 
   @OneToMany(() => AgendaSlot, (s) => s.event)
   agendaSlots: AgendaSlot[];
+
+  @OneToMany(() => EventVideo, (v) => v.event, { cascade: true })
+  videos: EventVideo[];
 
   @CreateDateColumn()
   createdAt: Date;

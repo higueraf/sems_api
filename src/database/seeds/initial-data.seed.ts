@@ -88,7 +88,36 @@ export async function seed(dataSource: DataSource) {
   console.log('✅ Users seeded');
 
   // ─── Scientific Product Types ─────────────────────────────────────────────
+  // 4 tipos en total. Activos: Ponencia (pptx) + Capítulo de Libro (docx).
+  // Inactivos (uso futuro): Artículo Científico, Póster Científico.
   const productTypesData = [
+    {
+      name: 'Ponencia / Comunicación Oral',
+      description: 'Presentación oral de investigación o avance de investigación en formato PowerPoint. Máximo 15 minutos de exposición.',
+      maxAuthors: 4,
+      minPages: null as any,
+      maxPages: null as any,
+      maxPresentationMinutes: 15,
+      requiresFile: true,
+      allowedFileFormats: 'pptx',
+      formatGuidelinesHtml: '<p>Presentación en formato PowerPoint (pptx). Máximo 15 minutos. Debe incluir: título, autores, introducción, desarrollo y conclusiones.</p>',
+      isActive: true,
+    },
+    {
+      name: 'Capítulo de Libro',
+      description: 'Capítulo para libro científico con revisión por pares. Incluye investigaciones completas con metodología, resultados, discusión y conclusiones.',
+      maxAuthors: 4,
+      minPages: 6,
+      maxPages: 20,
+      maxPresentationMinutes: 20,
+      requiresFile: true,
+      allowedFileFormats: 'docx',
+      formatGuidelinesHtml: `<p><strong>Formato:</strong> Times New Roman 12pt, interlineado 1.5, márgenes 2.5cm sup/inf – 3cm izq/der.</p>
+<p><strong>Extensión:</strong> mínimo 6 páginas, máximo 20 (incluye bibliografía).</p>
+<p><strong>Estructura obligatoria:</strong> Título (español e inglés), Autores (máx. 4) con ORCID, Resumen (máx. 250 palabras), Palabras clave (máx. 6), Abstract, Keywords, Introducción, Metodología, Resultados, Discusión, Conclusiones, Bibliografía APA 7ma edición.</p>
+<p><strong>Figuras y tablas:</strong> fuente 10pt, con título y fuente de referencia.</p>`,
+      isActive: true,
+    },
     {
       name: 'Artículo Científico',
       description: 'Artículo de investigación con metodología, resultados y discusión.',
@@ -97,27 +126,9 @@ export async function seed(dataSource: DataSource) {
       maxPages: 10,
       maxPresentationMinutes: 15,
       requiresFile: true,
+      allowedFileFormats: 'docx',
       formatGuidelinesHtml: '<p>Formato Times New Roman 12pt, interlineado 1.5, máximo 10 páginas incluyendo bibliografía. Citas en formato APA 7ma edición.</p>',
-    },
-    {
-      name: 'Capítulo de Libro',
-      description: 'Capítulo para libro científico con revisión por pares.',
-      maxAuthors: 4,
-      minPages: 10,
-      maxPages: 20,
-      maxPresentationMinutes: 20,
-      requiresFile: true,
-      formatGuidelinesHtml: '<p>Formato Times New Roman 12pt, márgenes 2.5cm sup/inf, 3cm izq/der. Mínimo 10 páginas, máximo 20.</p>',
-    },
-    {
-      name: 'Ponencia / Comunicación Oral',
-      description: 'Presentación oral de investigación o avance de investigación.',
-      maxAuthors: 4,
-      minPages: 4,
-      maxPages: 8,
-      maxPresentationMinutes: 15,
-      requiresFile: false,
-      formatGuidelinesHtml: '<p>Resumen ampliado. Presentación de máximo 15 minutos. Se debe enviar el resumen en formato indicado.</p>',
+      isActive: false,
     },
     {
       name: 'Póster Científico',
@@ -127,15 +138,23 @@ export async function seed(dataSource: DataSource) {
       maxPages: 2,
       maxPresentationMinutes: 5,
       requiresFile: true,
+      allowedFileFormats: 'pdf',
       formatGuidelinesHtml: '<p>Formato A0 (841 x 1189 mm). Debe incluir: título, autores, introducción, metodología, resultados y conclusiones.</p>',
+      isActive: false,
     },
   ];
 
   const savedProductTypes: Record<string, ScientificProductType> = {};
-  for (const pt of productTypesData) {
+  for (const { isActive, ...pt } of productTypesData) {
     let existing = await productTypeRepo.findOne({ where: { name: pt.name } });
     if (!existing) {
-      existing = await productTypeRepo.save(productTypeRepo.create({ ...pt, isActive: true }));
+      existing = await productTypeRepo.save(
+        productTypeRepo.create({ ...pt, isActive }),
+      );
+    } else {
+      // Actualiza los campos clave en registros existentes
+      Object.assign(existing, { ...pt, isActive });
+      await productTypeRepo.save(existing);
     }
     savedProductTypes[pt.name] = existing;
   }
@@ -359,128 +378,124 @@ El evento se realizará del 18 al 22 de mayo de 2026 en la Institución Universi
   }
   console.log('✅ Organizers seeded');
 
-  // ─── Guidelines ───────────────────────────────────────────────────────────
+  // ─── Guidelines — 1 pauta por tipo de producto ───────────────────────────
+  // Estrategia: ocultar TODAS las pautas anteriores del evento,
+  // luego crear/actualizar las pautas canónicas vinculadas a su tipo de producto.
+  await guidelineRepo.update({ eventId: event.id }, { isVisible: false });
+
   const guidelinesData = [
     {
-      title: 'Formato del Documento',
-      content: `<ul>
-        <li>Fuente: Times New Roman 12pt para párrafos</li>
-        <li>Interlineado: 1.5 (sin sangría en párrafos)</li>
-        <li>Títulos, figuras y tablas: fuente tamaño 10pt</li>
-        <li>Máximo 10 páginas incluyendo bibliografía</li>
-        <li>Documento en formato Word editable</li>
-      </ul>`,
+      title: 'Capítulo de Libro',
+      productTypeName: 'Capítulo de Libro',
+      content: `<h3>Formato del documento</h3>
+<ul>
+  <li>Fuente: <strong>Times New Roman 12pt</strong> para párrafos; 10pt para títulos de figuras y tablas</li>
+  <li>Interlineado: <strong>1.5</strong> (sin sangría en párrafos)</li>
+  <li>Márgenes: <strong>2.5 cm</strong> superior e inferior — <strong>3 cm</strong> izquierdo y derecho</li>
+  <li>Extensión: mínimo <strong>6 páginas</strong>, máximo <strong>20 páginas</strong> (incluye bibliografía)</li>
+  <li>Archivo: Word editable (<strong>.docx</strong>)</li>
+  <li>Figuras: <em>"Imagen 1.- [Nombre]"</em> — Tablas: <em>"Tabla 1 - [Nombre]"</em>. Toda figura o tabla debe incluir su fuente</li>
+</ul>
+
+<h3>Estructura obligatoria</h3>
+<ol>
+  <li><strong>Título en español</strong> (14pt) y <strong>título en inglés</strong></li>
+  <li><strong>Datos de los autores</strong> (máx. 4): nombres completos, título académico, institución/afiliación, email institucional, ORCID, país y ciudad</li>
+  <li><strong>Resumen</strong> en español (máx. 250 palabras)</li>
+  <li><strong>Palabras clave</strong> (máx. 6, orden alfabético)</li>
+  <li><strong>Abstract</strong> en inglés</li>
+  <li><strong>Keywords</strong> en inglés</li>
+  <li><strong>Introducción</strong> (1 a 1.5 páginas)</li>
+  <li><strong>Método de investigación</strong> (máx. 1 página)</li>
+  <li><strong>Resultados</strong> (máx. 2 páginas)</li>
+  <li><strong>Discusión</strong> (máx. 250 palabras)</li>
+  <li><strong>Conclusiones</strong> (máx. 1 página)</li>
+  <li><strong>Bibliografía</strong> en formato APA 7ma edición</li>
+</ol>
+
+<h3>Bibliografía — APA 7ma edición</h3>
+<ul>
+  <li><strong>Artículo:</strong> Apellido, N. (Año). Título del artículo. <em>Nombre de la Revista</em>, Vol(N), pp–pp. https://doi.org/xxx</li>
+  <li><strong>Libro:</strong> Apellido, N. (Año). <em>Título del libro</em>. Editorial.</li>
+  <li><strong>Capítulo:</strong> Apellido, N. (Año). Título del capítulo. En N. Editor (Ed.), <em>Título del libro</em> (pp. xx–xx). Editorial.</li>
+  <li><strong>Sitio web:</strong> Apellido, N. (Año). Título. Recuperado de https://url</li>
+</ul>
+
+<h3>Integridad académica</h3>
+<ul>
+  <li>Índice de similitud/plagio máximo permitido: <strong>8%</strong> (sistema <em>Compilatio Magister+</em>)</li>
+  <li>El uso de IA generativa debe citarse correctamente</li>
+  <li>El incumplimiento implica el <strong>rechazo automático</strong> del trabajo</li>
+</ul>
+
+<h3>Proceso de envío, revisión y publicación</h3>
+<ul>
+  <li><strong>Envío:</strong> formulario en línea — seleccionar eje temático, máx. 4 autores con ORCID. Fecha límite: <strong>8 de mayo de 2026</strong></li>
+  <li><strong>Revisión:</strong> por pares del comité científico hasta el <strong>12 de mayo de 2026</strong>. Estados: Recibida › En Revisión › Revisión Requerida › Aprobada / Rechazada</li>
+  <li><strong>Publicación:</strong> trabajos aprobados en <em>Memorias del Simposio con ISBN digital</em></li>
+  <li>Certificado presentador con publicación: <strong>80 horas académicas</strong> | Certificado asistencia: <strong>50 horas</strong></li>
+</ul>`,
       category: GuidelineCategory.FORMAT,
-      iconName: 'FileText',
+      iconName: 'AlignLeft',
       displayOrder: 1,
     },
     {
-      title: 'Estructura del Artículo',
-      content: `<ol>
-        <li><strong>Título en español</strong> (tamaño 14pt)</li>
-        <li><strong>Título en inglés</strong></li>
-        <li><strong>Datos de los autores</strong> (máximo 4): nombres, título, afiliación, email institucional, ORCID, país y ciudad</li>
-        <li><strong>Resumen</strong> en español (máximo 250 palabras)</li>
-        <li><strong>Palabras clave</strong> (máximo 6, orden alfabético)</li>
-        <li><strong>Abstract</strong> en inglés</li>
-        <li><strong>Keywords</strong> en inglés</li>
-        <li><strong>Introducción</strong> (1 a 1.5 páginas)</li>
-        <li><strong>Método de investigación</strong> (máximo 1 página)</li>
-        <li><strong>Resultados</strong> (máximo 2 páginas)</li>
-        <li><strong>Discusión</strong> (máximo 250 palabras)</li>
-        <li><strong>Conclusiones</strong> (máximo 1 página)</li>
-        <li><strong>Bibliografía</strong> en formato APA 7ma edición</li>
-      </ol>`,
+      title: 'Ponencia / Comunicación Oral',
+      productTypeName: 'Ponencia / Comunicación Oral',
+      content: `<h3>Formato del archivo</h3>
+<ul>
+  <li>Archivo: presentación <strong>PowerPoint (.pptx)</strong></li>
+  <li>Tiempo de exposición: máximo <strong>15 minutos</strong></li>
+</ul>
+
+<h3>Contenido sugerido de la presentación</h3>
+<ol>
+  <li><strong>Diapositiva de título:</strong> nombre del trabajo, autores (máx. 4), institución, email de contacto y ORCID</li>
+  <li><strong>Introducción / Contexto:</strong> problema de investigación y justificación</li>
+  <li><strong>Objetivos</strong></li>
+  <li><strong>Metodología</strong></li>
+  <li><strong>Resultados y discusión</strong></li>
+  <li><strong>Conclusiones</strong></li>
+  <li><strong>Referencias principales</strong> (APA 7ma edición)</li>
+</ol>
+
+<h3>Integridad académica</h3>
+<ul>
+  <li>Índice de similitud/plagio máximo permitido: <strong>8%</strong> (sistema <em>Compilatio Magister+</em>)</li>
+  <li>El uso de IA generativa debe citarse correctamente</li>
+  <li>El incumplimiento implica el <strong>rechazo automático</strong> del trabajo</li>
+</ul>
+
+<h3>Proceso de envío, revisión y publicación</h3>
+<ul>
+  <li><strong>Envío:</strong> formulario en línea — seleccionar eje temático, máx. 4 autores con ORCID. Fecha límite: <strong>8 de mayo de 2026</strong></li>
+  <li><strong>Revisión:</strong> por pares del comité científico hasta el <strong>12 de mayo de 2026</strong></li>
+  <li><strong>Publicación:</strong> ponencias aprobadas incluidas en <em>Memorias del Simposio con ISBN digital</em></li>
+  <li>Certificado presentador con publicación: <strong>80 horas académicas</strong> | Certificado asistencia: <strong>50 horas</strong></li>
+</ul>`,
       category: GuidelineCategory.FORMAT,
-      iconName: 'AlignLeft',
+      iconName: 'Presentation',
       displayOrder: 2,
-    },
-    {
-      title: 'Figuras y Tablas',
-      content: `<ul>
-        <li>Fuente tamaño 10pt para contenido de figuras y tablas</li>
-        <li>Formato de imagen: "Imagen 1.- [Nombre de la imagen]"</li>
-        <li>Formato de tabla: "Tabla 1 - [Nombre de la tabla]"</li>
-        <li>Toda figura o tabla debe incluir su fuente de referencia</li>
-      </ul>`,
-      category: GuidelineCategory.FORMAT,
-      iconName: 'Image',
-      displayOrder: 3,
-    },
-    {
-      title: 'Plagio e Integridad Académica',
-      content: `<ul>
-        <li>El índice de similitud/plagio máximo permitido es del <strong>8%</strong></li>
-        <li>Sistema de detección utilizado: <em>Compilatio Magister+</em></li>
-        <li>El uso de IA debe citarse correctamente</li>
-        <li>El incumplimiento de cualquier pauta implica el rechazo automático del trabajo</li>
-      </ul>`,
-      category: GuidelineCategory.EVALUATION,
-      iconName: 'Shield',
-      displayOrder: 4,
-    },
-    {
-      title: 'Proceso de Envío',
-      content: `<ul>
-        <li>Eje temático: seleccionar uno de los 6 ejes disponibles</li>
-        <li>Máximo 4 autores por trabajo</li>
-        <li>Se debe incluir ORCID de cada autor</li>
-        <li>Envío a través del formulario de postulación en línea</li>
-        <li>Fecha límite de envío: <strong>8 de mayo de 2026</strong></li>
-        <li>El autor de correspondencia recibirá confirmación por correo electrónico</li>
-      </ul>`,
-      category: GuidelineCategory.SUBMISSION,
-      iconName: 'Upload',
-      displayOrder: 5,
-    },
-    {
-      title: 'Proceso de Revisión',
-      content: `<ul>
-        <li>Revisión por pares del comité científico</li>
-        <li>Plazo de revisión hasta el <strong>12 de mayo de 2026</strong></li>
-        <li>Posibles estados: Recibida, En Revisión, Revisión Requerida, Aprobada, Rechazada</li>
-        <li>Se notificarán los resultados al correo del autor de correspondencia</li>
-        <li>En caso de ajustes, se indicarán las observaciones a corregir</li>
-      </ul>`,
-      category: GuidelineCategory.EVALUATION,
-      iconName: 'CheckCircle',
-      displayOrder: 6,
-    },
-    {
-      title: 'Publicación',
-      content: `<ul>
-        <li>Los trabajos aprobados serán publicados en las <strong>Memorias del Simposio con ISBN digital</strong></li>
-        <li>Certificado de presentador con publicación: <strong>80 horas académicas</strong></li>
-        <li>Certificado de asistencia: <strong>50 horas académicas</strong></li>
-        <li>Certificado de miembro del Comité Científico según participación</li>
-      </ul>`,
-      category: GuidelineCategory.PUBLICATION,
-      iconName: 'Award',
-      displayOrder: 7,
-    },
-    {
-      title: 'Bibliografía - Normas APA 7ma Edición',
-      content: `<p>Toda la bibliografía debe seguir el formato APA 7ma edición:</p>
-      <ul>
-        <li><strong>Artículo de revista:</strong> Apellido, N. (Año). Título. <em>Revista</em>, Vol(Núm), pp-pp. https://doi.org/xxx</li>
-        <li><strong>Libro:</strong> Apellido, N. (Año). <em>Título</em>. Editorial.</li>
-        <li><strong>Capítulo:</strong> Apellido, N. (Año). Título capítulo. En E. Editor (Ed.), <em>Título libro</em> (pp. xx-xx). Editorial.</li>
-        <li><strong>Sitio web:</strong> Apellido, N. (Año). Título. Recuperado de https://url</li>
-      </ul>`,
-      category: GuidelineCategory.FORMAT,
-      iconName: 'Book',
-      displayOrder: 8,
     },
   ];
 
-  for (const g of guidelinesData) {
-    const exists = await guidelineRepo.findOne({
-      where: { eventId: event.id, title: g.title },
-    });
-    if (!exists) {
+  for (const { productTypeName, ...g } of guidelinesData) {
+    const productType = savedProductTypes[productTypeName] ?? null;
+    const productTypeId = productType?.id ?? null;
+
+    // Buscar por título O por productTypeId (para manejar renombrados)
+    let existing = await guidelineRepo.findOne({ where: { eventId: event.id, title: g.title } });
+    if (!existing && productTypeId) {
+      existing = await guidelineRepo.findOne({ where: { eventId: event.id, productTypeId } });
+    }
+
+    if (!existing) {
       await guidelineRepo.save(
-        guidelineRepo.create({ ...g, eventId: event.id, isVisible: true }),
+        guidelineRepo.create({ ...g, eventId: event.id, isVisible: true, productTypeId }),
       );
+    } else {
+      Object.assign(existing, { ...g, isVisible: true, productTypeId });
+      await guidelineRepo.save(existing);
     }
   }
   console.log('✅ Guidelines seeded');
