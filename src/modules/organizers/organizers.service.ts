@@ -22,24 +22,36 @@ export class OrganizersService {
   async findByEvent(eventId: string, visibleOnly = false) {
     const orgs = await this.orgRepo.find({
       where: { eventId, ...(visibleOnly ? { isVisible: true } : {}) },
-      relations: ['country', 'members', 'members.country'],
+      relations: ['country'],
       order: { displayOrder: 'ASC', name: 'ASC' },
     });
+    
+    // Si necesitamos los miembros, los obtenemos por separado
     if (visibleOnly) {
-      return orgs.map((o) => ({
-        ...o,
-        members: (o.members ?? [])
-          .filter((m) => m.isVisible)
-          .sort((a, b) => a.displayOrder - b.displayOrder),
-      }));
+      // Obtener miembros para cada organización
+      const orgsWithMembers = await Promise.all(
+        orgs.map(async (o) => {
+          const members = await this.memberRepo.find({
+            where: { organizerId: o.id, isVisible: true },
+            relations: ['country'],
+            order: { displayOrder: 'ASC' },
+          });
+          return {
+            ...o,
+            members,
+          };
+        })
+      );
+      return orgsWithMembers;
     }
+    
     return orgs;
   }
 
   async findOne(id: string) {
     const item = await this.orgRepo.findOne({
       where: { id },
-      relations: ['country', 'members', 'members.country'],
+      relations: ['country'],
     });
     if (!item) throw new NotFoundException('Organizer not found');
     return item;

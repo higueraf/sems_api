@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Delete, Param, Body, UseGuards,
 } from '@nestjs/common';
 import { EventsService } from './events.service';
-import { CreateEventDto, UpdateEventDto, CreateEventVideoDto, UpdateEventVideoDto } from './dto/event.dto';
+import { CreateEventDto, UpdateEventDto, CreateEventVideoDto, UpdateEventVideoDto, CreateWorkshopDto, UpdateWorkshopDto } from './dto/event.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -124,5 +124,38 @@ export class EventsController {
   @Delete('videos/:videoId')
   removeVideo(@Param('videoId') videoId: string) {
     return this.eventsService.removeVideo(videoId);
+  }
+
+  // ── Gestión de Talleres ─────────────────────────────────────────────────────
+
+  /** GET  /events/:id/workshops — lista talleres del evento (público) */
+  @Public()
+  @Get(':id/workshops')
+  findWorkshops(@Param('id') id: string) {
+    return this.eventsService.findWorkshops(id);
+  }
+
+  /** POST /events/:id/workshops — agrega taller (admin) */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/workshops')
+  addWorkshop(@Param('id') id: string, @Body() dto: CreateWorkshopDto) {
+    return this.eventsService.addWorkshop(id, dto);
+  }
+
+  /** PATCH /events/workshops/:workshopId — edita taller (admin) */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Patch('workshops/:workshopId')
+  updateWorkshop(@Param('workshopId') workshopId: string, @Body() dto: UpdateWorkshopDto) {
+    return this.eventsService.updateWorkshop(workshopId, dto);
+  }
+
+  /** DELETE /events/workshops/:workshopId — elimina taller (admin) */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Delete('workshops/:workshopId')
+  removeWorkshop(@Param('workshopId') workshopId: string) {
+    return this.eventsService.removeWorkshop(workshopId);
   }
 }

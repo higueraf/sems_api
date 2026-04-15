@@ -37,6 +37,7 @@ import { SubmissionFile } from './entities/submission-file.entity';
 import { AgendaSlot } from './entities/agenda-slot.entity';
 import { EmailLog } from './entities/email-log.entity';
 import { EventVideo } from './entities/event-video.entity';
+import { Workshop } from './entities/workshop.entity';
 
 @Module({
   imports: [
@@ -60,7 +61,7 @@ import { EventVideo } from './entities/event-video.entity';
           User, Country, Event, EventVideo, EventPageSection, ScientificProductType,
           ThematicAxis, Organizer, OrganizerMember, Guideline, Submission,
           SubmissionAuthor, SubmissionStatusHistory, SubmissionFile,
-          AgendaSlot, EmailLog,
+          AgendaSlot, EmailLog, Workshop,
         ],
         synchronize: true,
         logging: false,

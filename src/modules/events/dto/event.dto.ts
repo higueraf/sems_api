@@ -107,3 +107,50 @@ export class CreateEventVideoDto {
 }
 
 export class UpdateEventVideoDto extends CreateEventVideoDto {}
+
+export class CreateWorkshopDto {
+  @IsString()
+  title: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  @IsOptional()
+  instructor?: string;
+
+  @IsNumber()
+  @IsOptional()
+  duration?: number;
+
+  @IsNumber()
+  @IsOptional()
+  maxCapacity?: number;
+
+  @IsString()
+  @IsOptional()
+  prerequisites?: string;
+
+  @IsString()
+  @IsOptional()
+  registrationUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  materialsUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  youtubeUrl?: string;
+
+  @IsNumber()
+  @IsOptional()
+  displayOrder?: number;
+
+  @IsString()
+  @IsOptional()
+  status?: string;
+}
+
+export class UpdateWorkshopDto extends CreateWorkshopDto {}

@@ -3,40 +3,41 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Event } from '../../entities/event.entity';
 import { EventVideo } from '../../entities/event-video.entity';
-import { CreateEventDto, UpdateEventDto, CreateEventVideoDto, UpdateEventVideoDto } from './dto/event.dto';
+import { Workshop } from '../../entities/workshop.entity';
+import { CreateEventDto, UpdateEventDto, CreateEventVideoDto, UpdateEventVideoDto, CreateWorkshopDto, UpdateWorkshopDto } from './dto/event.dto';
 
 @Injectable()
 export class EventsService {
   constructor(
     @InjectRepository(Event) private repo: Repository<Event>,
     @InjectRepository(EventVideo) private videoRepo: Repository<EventVideo>,
+    @InjectRepository(Workshop) private workshopRepo: Repository<Workshop>,
   ) {}
 
   findAll() {
     return this.repo.find({ order: { startDate: 'DESC' } });
   }
 
-  /** Simposios anteriores (no activos, categoría symposium) con sus videos — público */
+  /** Simposios anteriores (no activos) con sus videos — público */
   findPrevious() {
     return this.repo
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.videos', 'videos')
       .where('event.isActive = false')
-      .andWhere("(event.category = 'symposium' OR event.category IS NULL)")
       .orderBy('event.startDate', 'DESC')
       .addOrderBy('videos.displayOrder', 'ASC')
       .getMany();
   }
 
-  /** Talleres anteriores (no activos, categoría workshop) con sus videos — público */
+  /** Talleres anteriores (no activos) - público */
   findPreviousWorkshops() {
     return this.repo
       .createQueryBuilder('event')
-      .leftJoinAndSelect('event.videos', 'videos')
+      .leftJoinAndSelect('event.workshops', 'workshops')
       .where('event.isActive = false')
-      .andWhere("event.category = 'workshop'")
+      .andWhere('workshops IS NOT NULL')
       .orderBy('event.startDate', 'DESC')
-      .addOrderBy('videos.displayOrder', 'ASC')
+      .addOrderBy('workshops.displayOrder', 'ASC')
       .getMany();
   }
 
@@ -134,5 +135,44 @@ export class EventsService {
     if (!video) throw new NotFoundException('Video not found');
     await this.videoRepo.remove(video);
     return { message: 'Video deleted' };
+  }
+
+  // ── Gestión de talleres ─────────────────────────────────────────────────────
+
+  /** Lista talleres de un evento ordenados por displayOrder */
+  findWorkshops(eventId: string) {
+    return this.workshopRepo.find({
+      where: { eventId },
+      order: { displayOrder: 'ASC', createdAt: 'ASC' },
+    });
+  }
+
+  /** Añade un taller a un evento */
+  async addWorkshop(eventId: string, dto: CreateWorkshopDto): Promise<Workshop> {
+    await this.findOne(eventId);
+    if (dto.displayOrder === undefined) {
+      const count = await this.workshopRepo.count({ where: { eventId } });
+      dto.displayOrder = count;
+    }
+    const workshop = this.workshopRepo.create({ ...dto, eventId });
+    const savedWorkshop = await this.workshopRepo.save(workshop);
+    return Array.isArray(savedWorkshop) ? savedWorkshop[0] : savedWorkshop;
+  }
+
+  /** Actualiza un taller existente */
+  async updateWorkshop(workshopId: string, dto: UpdateWorkshopDto): Promise<Workshop> {
+    const workshop = await this.workshopRepo.findOne({ where: { id: workshopId } });
+    if (!workshop) throw new NotFoundException('Workshop not found');
+    Object.assign(workshop, dto);
+    const savedWorkshop = await this.workshopRepo.save(workshop);
+    return Array.isArray(savedWorkshop) ? savedWorkshop[0] : savedWorkshop;
+  }
+
+  /** Elimina un taller */
+  async removeWorkshop(workshopId: string): Promise<{ message: string }> {
+    const workshop = await this.workshopRepo.findOne({ where: { id: workshopId } });
+    if (!workshop) throw new NotFoundException('Workshop not found');
+    await this.workshopRepo.remove(workshop);
+    return { message: 'Workshop deleted' };
   }
 }

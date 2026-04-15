@@ -79,10 +79,7 @@ export class Organizer {
   @Column({ default: true })
   isVisible: boolean;
 
-  /** Personas vinculadas a esta institución */
-  @OneToMany(() => OrganizerMember, (m) => m.organizer, { cascade: true, eager: false })
-  members: OrganizerMember[];
-
+  
   @CreateDateColumn()
   createdAt: Date;
 

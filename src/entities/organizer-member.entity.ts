@@ -25,7 +25,7 @@ export class OrganizerMember {
   id: string;
 
   /** Institución a la que pertenece este miembro */
-  @ManyToOne(() => Organizer, (o) => o.members, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Organizer, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organizerId' })
   organizer: Organizer;
 
