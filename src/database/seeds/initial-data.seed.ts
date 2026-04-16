@@ -387,53 +387,90 @@ El evento se realizará del 18 al 22 de mayo de 2026 en la Institución Universi
     {
       title: 'Capítulo de Libro',
       productTypeName: 'Capítulo de Libro',
-      content: `<h3>Formato del documento</h3>
+      content: `<h3>1. Formato del Documento</h3>
+<p><strong>Formato</strong></p>
 <ul>
-  <li>Fuente: <strong>Times New Roman 12pt</strong> para párrafos; 10pt para títulos de figuras y tablas</li>
+  <li>Fuente: <strong>Times New Roman 12pt</strong> para párrafos</li>
   <li>Interlineado: <strong>1.5</strong> (sin sangría en párrafos)</li>
-  <li>Márgenes: <strong>2.5 cm</strong> superior e inferior — <strong>3 cm</strong> izquierdo y derecho</li>
-  <li>Extensión: mínimo <strong>6 páginas</strong>, máximo <strong>20 páginas</strong> (incluye bibliografía)</li>
-  <li>Archivo: Word editable (<strong>.docx</strong>)</li>
-  <li>Figuras: <em>"Imagen 1.- [Nombre]"</em> — Tablas: <em>"Tabla 1 - [Nombre]"</em>. Toda figura o tabla debe incluir su fuente</li>
+  <li>Títulos, figuras y tablas: fuente tamaño <strong>10pt</strong></li>
+  <li>Máximo <strong>10 páginas</strong> incluyendo bibliografía</li>
+  <li>Documento en formato <strong>Word editable</strong></li>
 </ul>
 
-<h3>Estructura obligatoria</h3>
-<ol>
-  <li><strong>Título en español</strong> (14pt) y <strong>título en inglés</strong></li>
-  <li><strong>Datos de los autores</strong> (máx. 4): nombres completos, título académico, institución/afiliación, email institucional, ORCID, país y ciudad</li>
-  <li><strong>Resumen</strong> en español (máx. 250 palabras)</li>
-  <li><strong>Palabras clave</strong> (máx. 6, orden alfabético)</li>
-  <li><strong>Abstract</strong> en inglés</li>
-  <li><strong>Keywords</strong> en inglés</li>
-  <li><strong>Introducción</strong> (1 a 1.5 páginas)</li>
-  <li><strong>Método de investigación</strong> (máx. 1 página)</li>
-  <li><strong>Resultados</strong> (máx. 2 páginas)</li>
-  <li><strong>Discusión</strong> (máx. 250 palabras)</li>
-  <li><strong>Conclusiones</strong> (máx. 1 página)</li>
-  <li><strong>Bibliografía</strong> en formato APA 7ma edición</li>
-</ol>
-
-<h3>Bibliografía — APA 7ma edición</h3>
+<h3>2. Estructura del Artículo</h3>
+<p><strong>Formato</strong></p>
 <ul>
-  <li><strong>Artículo:</strong> Apellido, N. (Año). Título del artículo. <em>Nombre de la Revista</em>, Vol(N), pp–pp. https://doi.org/xxx</li>
-  <li><strong>Libro:</strong> Apellido, N. (Año). <em>Título del libro</em>. Editorial.</li>
-  <li><strong>Capítulo:</strong> Apellido, N. (Año). Título del capítulo. En N. Editor (Ed.), <em>Título del libro</em> (pp. xx–xx). Editorial.</li>
+  <li>Título en español (tamaño <strong>14pt</strong>)</li>
+  <li>Título en inglés</li>
+  <li>Datos de los autores (máximo <strong>4</strong>): nombres, título, afiliación, email institucional, ORCID, país y ciudad</li>
+  <li>Resumen en español (máximo <strong>250 palabras</strong>)</li>
+  <li>Palabras clave (máximo <strong>6</strong>, orden alfabético)</li>
+  <li>Abstract en inglés</li>
+  <li>Keywords en inglés</li>
+  <li>Introducción (<strong>1 a 1.5 páginas</strong>)</li>
+  <li>Método de investigación (máximo <strong>1 página</strong>)</li>
+  <li>Resultados (máximo <strong>2 páginas</strong>)</li>
+  <li>Discusión (máximo <strong>250 palabras</strong>)</li>
+  <li>Conclusiones (máximo <strong>1 página</strong>)</li>
+  <li>Bibliografía en formato <strong>APA 7ma edición</strong></li>
+</ul>
+
+<h3>3. Figuras y Tablas</h3>
+<p><strong>Formato</strong></p>
+<ul>
+  <li>Fuente tamaño <strong>10pt</strong> para contenido de figuras y tablas</li>
+  <li>Formato de imagen: <em>"Imagen 1.- [Nombre de la imagen]"</em></li>
+  <li>Formato de tabla: <em>"Tabla 1 - [Nombre de la tabla]"</em></li>
+  <li>Toda figura o tabla debe incluir su fuente de referencia</li>
+</ul>
+
+<h3>4. Plagio e Integridad Académica</h3>
+<p><strong>Evaluación</strong></p>
+<ul>
+  <li>El índice de similitud/plagio máximo permitido es del <strong>8%</strong></li>
+  <li>Sistema de detección utilizado: <em>Compilatio Magister+</em></li>
+  <li>El uso de IA debe citarse correctamente</li>
+  <li>El incumplimiento de cualquier pauta implica el <strong>rechazo automático</strong> del trabajo</li>
+</ul>
+
+<h3>5. Proceso de Envío</h3>
+<p><strong>Envío</strong></p>
+<ul>
+  <li>Eje temático: seleccionar uno de los <strong>6 ejes disponibles</strong></li>
+  <li>Máximo <strong>4 autores</strong> por trabajo</li>
+  <li>Se debe incluir <strong>ORCID</strong> de cada autor</li>
+  <li>Envío a través del formulario de postulación en línea</li>
+  <li>Fecha límite de envío: <strong>8 de mayo de 2026</strong></li>
+  <li>El autor de correspondencia recibirá confirmación por correo electrónico</li>
+</ul>
+
+<h3>6. Proceso de Revisión</h3>
+<p><strong>Evaluación</strong></p>
+<ul>
+  <li>Revisión por pares del comité científico</li>
+  <li>Plazo de revisión hasta el <strong>12 de mayo de 2026</strong></li>
+  <li>Posibles estados: <strong>Recibida, En Revisión, Revisión Requerida, Aprobada, Rechazada</strong></li>
+  <li>Se notificarán los resultados al correo del autor de correspondencia</li>
+  <li>En caso de ajustes, se indicarán las observaciones a corregir</li>
+</ul>
+
+<h3>7. Publicación</h3>
+<p><strong>Publicación</strong></p>
+<ul>
+  <li>Los trabajos aprobados serán publicados en las <em>Memorias del Simposio con ISBN digital</em></li>
+  <li>Certificado de presentador con publicación: <strong>80 horas académicas</strong></li>
+  <li>Certificado de asistencia: <strong>50 horas académicas</strong></li>
+  <li>Certificado de miembro del Comité Científico según participación</li>
+</ul>
+
+<h3>8. Bibliografía - Normas APA 7ma Edición</h3>
+<p><strong>Formato</strong></p>
+<ul>
+  <li>Toda la bibliografía debe seguir el formato <strong>APA 7ma edición</strong>:</li>
+  <li><strong>Artículo de revista:</strong> Apellido, N. (Año). Título. Revista, Vol(Núm), pp-pp. https://doi.org/xxx</li>
+  <li><strong>Libro:</strong> Apellido, N. (Año). Título. Editorial.</li>
+  <li><strong>Capítulo:</strong> Apellido, N. (Año). Título capítulo. En E. Editor (Ed.), Título libro (pp. xx-xx). Editorial.</li>
   <li><strong>Sitio web:</strong> Apellido, N. (Año). Título. Recuperado de https://url</li>
-</ul>
-
-<h3>Integridad académica</h3>
-<ul>
-  <li>Índice de similitud/plagio máximo permitido: <strong>8%</strong> (sistema <em>Compilatio Magister+</em>)</li>
-  <li>El uso de IA generativa debe citarse correctamente</li>
-  <li>El incumplimiento implica el <strong>rechazo automático</strong> del trabajo</li>
-</ul>
-
-<h3>Proceso de envío, revisión y publicación</h3>
-<ul>
-  <li><strong>Envío:</strong> formulario en línea — seleccionar eje temático, máx. 4 autores con ORCID. Fecha límite: <strong>8 de mayo de 2026</strong></li>
-  <li><strong>Revisión:</strong> por pares del comité científico hasta el <strong>12 de mayo de 2026</strong>. Estados: Recibida › En Revisión › Revisión Requerida › Aprobada / Rechazada</li>
-  <li><strong>Publicación:</strong> trabajos aprobados en <em>Memorias del Simposio con ISBN digital</em></li>
-  <li>Certificado presentador con publicación: <strong>80 horas académicas</strong> | Certificado asistencia: <strong>50 horas</strong></li>
 </ul>`,
       category: GuidelineCategory.FORMAT,
       iconName: 'AlignLeft',

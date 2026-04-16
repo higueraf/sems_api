@@ -33,11 +33,8 @@ export class EventsService {
   findPreviousWorkshops() {
     return this.repo
       .createQueryBuilder('event')
-      .leftJoinAndSelect('event.workshops', 'workshops')
       .where('event.isActive = false')
-      .andWhere('workshops IS NOT NULL')
       .orderBy('event.startDate', 'DESC')
-      .addOrderBy('workshops.displayOrder', 'ASC')
       .getMany();
   }
 

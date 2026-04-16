@@ -25,27 +25,18 @@ export class OrganizersService {
       relations: ['country'],
       order: { displayOrder: 'ASC', name: 'ASC' },
     });
-    
-    // Si necesitamos los miembros, los obtenemos por separado
-    if (visibleOnly) {
-      // Obtener miembros para cada organización
-      const orgsWithMembers = await Promise.all(
-        orgs.map(async (o) => {
-          const members = await this.memberRepo.find({
-            where: { organizerId: o.id, isVisible: true },
-            relations: ['country'],
-            order: { displayOrder: 'ASC' },
-          });
-          return {
-            ...o,
-            members,
-          };
-        })
-      );
-      return orgsWithMembers;
-    }
-    
-    return orgs;
+
+    // Cargar miembros para cada organización (tanto público como admin)
+    return Promise.all(
+      orgs.map(async (o) => {
+        const members = await this.memberRepo.find({
+          where: { organizerId: o.id, ...(visibleOnly ? { isVisible: true } : {}) },
+          relations: ['country'],
+          order: { displayOrder: 'ASC' },
+        });
+        return { ...o, members };
+      }),
+    );
   }
 
   async findOne(id: string) {

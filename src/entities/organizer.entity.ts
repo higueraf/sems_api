@@ -79,7 +79,9 @@ export class Organizer {
   @Column({ default: true })
   isVisible: boolean;
 
-  
+  @OneToMany(() => OrganizerMember, (m) => m.organizer, { cascade: true })
+  members: OrganizerMember[];
+
   @CreateDateColumn()
   createdAt: Date;
 
