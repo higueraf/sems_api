@@ -81,7 +81,7 @@ export class LocalFilesController {
   private serveFile(folder: string, filename: string, res: Response) {
     // Sanitizar — prevenir path traversal
     const safeFolder   = folder.replace(/[^a-zA-Z0-9_-]/g, '');
-    const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '');
+    const safeFilename = filename.replace(/[^a-zA-Z0-9._áéíóúÁÉÍÓÚñÑ-]/g, '');
 
     const fullPath = join(this.storage.localUploadDir, safeFolder, safeFilename);
     

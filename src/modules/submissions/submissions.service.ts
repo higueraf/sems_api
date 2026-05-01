@@ -95,7 +95,18 @@ export class SubmissionsService {
         const allowed = getAllowedMimesForFormats(pt?.allowedFileFormats);
         if (pf.size > MAX_PRODUCT_FILE_SIZE)
           throw new BadRequestException(`El archivo "${pf.originalname}" supera 20 MB`);
-        if (!allowed.includes(pf.mimetype)) {
+
+        let isValid = allowed.includes(pf.mimetype);
+        // Fallback para Postman/herramientas genéricas que envían application/octet-stream
+        if (!isValid && pf.mimetype === 'application/octet-stream') {
+          const ext = pf.originalname.split('.').pop()?.toLowerCase() || '';
+          const fmts = (pt?.allowedFileFormats || 'docx').split(',').map(f => f.trim().toLowerCase());
+          if (fmts.includes(ext) || (ext === 'ppt' && fmts.includes('pptx')) || (ext === 'doc' && fmts.includes('docx'))) {
+            isValid = true;
+          }
+        }
+
+        if (!isValid) {
           const fmts = pt?.allowedFileFormats || 'docx';
           throw new BadRequestException(
             `El archivo "${pf.originalname}" no es un formato válido para "${pt?.name ?? ptId}". Formatos permitidos: ${fmts}`,
@@ -183,7 +194,7 @@ export class SubmissionsService {
             const ptId = pf.fieldname.replace('productFile_', '');
             const pt   = ptMap[ptId];
             try {
-              const slug    = (pt?.name ?? ptId).replace(/\s+/g, '-').toLowerCase();
+              const slug    = (pt?.name ?? ptId).replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '-').replace(/-+/g, '-').toLowerCase();
               const fileUrl = await storage.upload(
                 pf, 'submissions',
                 `${slug}-${referenceCode}-v1`,
@@ -406,7 +417,7 @@ export class SubmissionsService {
 
     // Slug del tipo de producto para el nombre del archivo en B2
     const slug = pt?.name
-      ? pt.name.replace(/\s+/g, '-').toLowerCase()
+      ? pt.name.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '-').replace(/-+/g, '-').toLowerCase()
       : 'manuscrito';
 
     // Subir a B2

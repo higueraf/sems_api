@@ -300,16 +300,16 @@ export class StorageService {
   }
 
   private normalizeUrl(url: string): string {
-    // Corregir dobles slashes
-    url = url.replace(/\/+/g, '/');
+    const isHttp = url.startsWith('http://');
+    const isHttps = url.startsWith('https://');
     
-    // Corregir dominios sin punto (xyzlocal -> xyz.local)
-    url = url.replace(/(\w+)local/g, '$1.local');
+    let cleanUrl = url.replace(/^https?:\/\//, '');
+    cleanUrl = cleanUrl.replace(/\/+/g, '/');
+    cleanUrl = cleanUrl.replace(/(\w+)local/g, '$1.local');
     
-    // Asegurar que no haya protocolos duplicados
-    url = url.replace(/(https?:\/\/)+/g, '$1');
-    
-    return url;
+    if (isHttps) return `https://${cleanUrl}`;
+    if (isHttp) return `http://${cleanUrl}`;
+    return cleanUrl;
   }
 
   // ════════════════════════════════════════════════════════════════════════════
