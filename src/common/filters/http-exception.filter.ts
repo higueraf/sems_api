@@ -8,6 +8,14 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
+const MULTER_CODE_MESSAGES: Record<string, string> = {
+  LIMIT_FILE_SIZE:  'El archivo supera el tamaño máximo permitido (mín. 10 MB). Reduzca el archivo e intente de nuevo.',
+  LIMIT_FILE_COUNT: 'Se superó el número máximo de archivos permitidos.',
+  LIMIT_FIELD_KEY:  'Nombre de campo demasiado largo.',
+  LIMIT_FIELD_VALUE:'Valor de campo demasiado largo.',
+  LIMIT_UNEXPECTED_FILE: 'Tipo de archivo no esperado.',
+};
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
@@ -18,7 +26,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'Internal server error';
+    let message = 'Error interno del servidor';
     let errors: any = null;
 
     if (exception instanceof HttpException) {
@@ -30,6 +38,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = (exResponse as any).message || message;
         errors = (exResponse as any).errors || null;
       }
+    } else if (
+      exception instanceof Error &&
+      (exception as any).code &&
+      MULTER_CODE_MESSAGES[(exception as any).code]
+    ) {
+      // MulterError — tamaño, cantidad de archivos, etc.
+      status  = HttpStatus.BAD_REQUEST;
+      message = MULTER_CODE_MESSAGES[(exception as any).code];
     } else if (exception instanceof Error) {
       this.logger.error(`Unhandled error: ${exception.message}`, exception.stack);
     }

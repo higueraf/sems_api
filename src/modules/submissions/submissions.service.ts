@@ -314,7 +314,7 @@ export class SubmissionsService {
 
   // ── Listar / buscar ─────────────────────────────────────────────────────────
 
-  findAll(filters: { eventId?: string; status?: string; thematicAxisId?: string; search?: string }) {
+  findAll(filters: { eventId?: string; status?: string; thematicAxisId?: string; productTypeId?: string; search?: string }) {
     const query = this.repo
       .createQueryBuilder('s')
       .leftJoinAndSelect('s.thematicAxis', 'axis')
@@ -324,9 +324,10 @@ export class SubmissionsService {
       .leftJoinAndSelect('s.country', 'country')
       .orderBy('s.createdAt', 'DESC');
 
-    if (filters.eventId)        query.andWhere('s.eventId = :eventId',     { eventId: filters.eventId });
-    if (filters.status)         query.andWhere('s.status = :status',       { status: filters.status });
+    if (filters.eventId)        query.andWhere('s.eventId = :eventId',       { eventId: filters.eventId });
+    if (filters.status)         query.andWhere('s.status = :status',         { status: filters.status });
     if (filters.thematicAxisId) query.andWhere('s.thematicAxisId = :axisId', { axisId: filters.thematicAxisId });
+    if (filters.productTypeId)  query.andWhere('s.productTypeId = :ptId',    { ptId: filters.productTypeId });
     if (filters.search) {
       query.andWhere(
         '(s.titleEs ILIKE :q OR s.referenceCode ILIKE :q OR authors.fullName ILIKE :q OR authors.email ILIKE :q)',
@@ -357,9 +358,24 @@ export class SubmissionsService {
       .leftJoinAndSelect('s.authors', 'authors')
       .leftJoinAndSelect('s.thematicAxis', 'axis')
       .leftJoinAndSelect('s.productType', 'pt')
+      .leftJoinAndSelect('s.statusHistory', 'statusHistory')
       .where('authors.email = :email', { email })
       .orderBy('s.createdAt', 'DESC')
+      .addOrderBy('statusHistory.createdAt', 'ASC')
       .getMany();
+  }
+
+  async findByReferenceCode(referenceCode: string) {
+    const sub = await this.repo
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('s.authors', 'authors')
+      .leftJoinAndSelect('s.thematicAxis', 'axis')
+      .leftJoinAndSelect('s.productType', 'pt')
+      .leftJoinAndSelect('s.statusHistory', 'statusHistory')
+      .where('s.referenceCode = :referenceCode', { referenceCode })
+      .addOrderBy('statusHistory.createdAt', 'ASC')
+      .getOne();
+    return sub ? [sub] : [];
   }
 
   // ── Historial de archivos ───────────────────────────────────────────────────
@@ -698,16 +714,51 @@ export class SubmissionsService {
   }
 
   async getStats(eventId: string) {
-    const result = await this.repo
+    // Stats globales por estado
+    const globalRows = await this.repo
       .createQueryBuilder('s')
       .select('s.status', 'status')
       .addSelect('COUNT(*)', 'count')
       .where('s.eventId = :eventId', { eventId })
       .groupBy('s.status')
       .getRawMany();
-    const stats: Record<string, number> = {};
-    for (const row of result) stats[row.status] = parseInt(row.count, 10);
-    const total = Object.values(stats).reduce((a, b) => a + b, 0);
-    return { total, byStatus: stats };
+
+    const byStatus: Record<string, number> = {};
+    for (const row of globalRows) byStatus[row.status] = parseInt(row.count, 10);
+    const total = Object.values(byStatus).reduce((a, b) => a + b, 0);
+
+    // Stats por tipo de producción científica y estado
+    const productRows = await this.repo
+      .createQueryBuilder('s')
+      .leftJoin('s.productType', 'pt')
+      .select('s.productTypeId', 'productTypeId')
+      .addSelect('pt.name', 'productTypeName')
+      .addSelect('s.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .where('s.eventId = :eventId', { eventId })
+      .groupBy('s.productTypeId')
+      .addGroupBy('pt.name')
+      .addGroupBy('s.status')
+      .orderBy('pt.name', 'ASC')
+      .getRawMany();
+
+    // Agrupar por tipo de producto
+    const productMap: Record<string, { productTypeId: string; productTypeName: string; total: number; byStatus: Record<string, number> }> = {};
+    for (const row of productRows) {
+      const ptId = row.productTypeId;
+      if (!productMap[ptId]) {
+        productMap[ptId] = {
+          productTypeId: ptId,
+          productTypeName: row.productTypeName ?? 'Sin tipo',
+          total: 0,
+          byStatus: {},
+        };
+      }
+      const count = parseInt(row.count, 10);
+      productMap[ptId].byStatus[row.status] = count;
+      productMap[ptId].total += count;
+    }
+
+    return { total, byStatus, byProductType: Object.values(productMap) };
   }
 }

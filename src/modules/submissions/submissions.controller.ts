@@ -91,6 +91,12 @@ export class SubmissionsController {
     return this.service.findByEmail(email);
   }
 
+  @Public()
+  @Get('check-code/:referenceCode')
+  findByReferenceCode(@Param('referenceCode') referenceCode: string) {
+    return this.service.findByReferenceCode(referenceCode);
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // ADMIN / EVALUADOR
   // ════════════════════════════════════════════════════════════════════════════
@@ -102,9 +108,10 @@ export class SubmissionsController {
     @Query('eventId') eventId?: string,
     @Query('status') status?: string,
     @Query('thematicAxisId') thematicAxisId?: string,
+    @Query('productTypeId') productTypeId?: string,
     @Query('search') search?: string,
   ) {
-    return this.service.findAll({ eventId, status, thematicAxisId, search });
+    return this.service.findAll({ eventId, status, thematicAxisId, productTypeId, search });
   }
 
   @UseGuards(RolesGuard)
