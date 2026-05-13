@@ -58,7 +58,7 @@ jobs:
 
             pm2 stop sems-api || true
             pm2 delete sems-api || true
-            pm2 start dist/main.js --name sems-api
+            pm2 start dist/src/main.js --name sems-api
             pm2 save
 
             # ── Nginx: aumentar límite de upload a 10MB ─────────────────────
