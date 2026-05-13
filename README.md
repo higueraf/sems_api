@@ -185,3 +185,12 @@ Los archivos se guardan en Backblaze B2 (configurado por variables de entorno) y
 - **Autores**: Foto, título académico, tipo de correo, email, ORCID, tipo de documento, número de documento
 - **Documento**: Manuscrito en formato Word (obligatorio)
 - **Identificación**: Documento PDF de identidad (obligatorio)
+
+
+
+CREATE USER sems_user_pg WITH PASSWORD 'sems_pass_123';
+CREATE DATABASE sems_db OWNER sems_user_pg;
+GRANT ALL PRIVILEGES ON DATABASE sems_db TO sems_user_pg;
+
+
+ALTER USER sems_user_pg WITH PASSWORD 'sems_pass_123';

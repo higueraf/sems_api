@@ -47,6 +47,14 @@ export class Submission {
   @Column({ type: 'jsonb', nullable: true })
   productTypeIds: string[];
 
+  /**
+   * Estatus independiente por tipo de producto científico.
+   * Clave: productTypeId, Valor: SubmissionStatus
+   * Se inicializa con todos los productTypeIds en 'received' al crear la postulación.
+   */
+  @Column({ type: 'jsonb', nullable: true, default: {} })
+  productStatuses: Record<string, string>;
+
   @Column()
   titleEs: string;
 

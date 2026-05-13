@@ -12,6 +12,7 @@ import { SubmissionFileType } from '../../entities/submission-file.entity';
 import {
   CreateSubmissionDto, UpdateSubmissionStatusDto,
   SendCustomEmailDto, AssignEvaluatorDto, BulkEmailDto,
+  UpdateProductTypeStatusDto,
 } from './dto/submission.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -151,6 +152,17 @@ export class SubmissionsController {
   @Patch('admin/:id/assign-evaluator')
   assignEvaluator(@Param('id') id: string, @Body() dto: AssignEvaluatorDto) {
     return this.service.assignEvaluator(id, dto);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
+  @Patch('admin/:id/product-type-status')
+  changeProductTypeStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateProductTypeStatusDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.changeProductTypeStatus(id, dto, user);
   }
 
   // ── Descarga del documento activo ─────────────────────────────────────────

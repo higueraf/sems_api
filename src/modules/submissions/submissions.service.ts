@@ -12,6 +12,7 @@ import { User } from '../../entities/user.entity';
 import {
   CreateSubmissionDto, UpdateSubmissionStatusDto,
   SendCustomEmailDto, AssignEvaluatorDto, BulkEmailDto,
+  UpdateProductTypeStatusDto,
 } from './dto/submission.dto';
 import { SubmissionStatus } from '../../common/enums/submission-status.enum';
 import { MailService } from '../mail/mail.service';
@@ -24,7 +25,22 @@ const STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
   [SubmissionStatus.APPROVED]:           [SubmissionStatus.SCHEDULED, SubmissionStatus.REJECTED],
   [SubmissionStatus.REJECTED]:           [SubmissionStatus.UNDER_REVIEW],
   [SubmissionStatus.WITHDRAWN]:          [],
-  [SubmissionStatus.SCHEDULED]:          [SubmissionStatus.APPROVED],
+  [SubmissionStatus.SCHEDULED]:          [SubmissionStatus.APPROVED, SubmissionStatus.EXECUTED],
+  [SubmissionStatus.EXECUTED]:           [SubmissionStatus.CERTIFICATE_SENT, SubmissionStatus.SCHEDULED],
+  [SubmissionStatus.CERTIFICATE_SENT]:   [SubmissionStatus.EXECUTED],
+};
+
+/** Transiciones permitidas para el estatus por tipo de producto científico */
+const PRODUCT_TYPE_STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
+  [SubmissionStatus.RECEIVED]:           [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.WITHDRAWN],
+  [SubmissionStatus.UNDER_REVIEW]:       [SubmissionStatus.APPROVED, SubmissionStatus.REJECTED, SubmissionStatus.REVISION_REQUESTED, SubmissionStatus.WITHDRAWN],
+  [SubmissionStatus.REVISION_REQUESTED]: [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.REJECTED, SubmissionStatus.WITHDRAWN],
+  [SubmissionStatus.APPROVED]:           [SubmissionStatus.SCHEDULED, SubmissionStatus.REJECTED],
+  [SubmissionStatus.REJECTED]:           [SubmissionStatus.UNDER_REVIEW],
+  [SubmissionStatus.WITHDRAWN]:          [],
+  [SubmissionStatus.SCHEDULED]:          [SubmissionStatus.APPROVED, SubmissionStatus.EXECUTED],
+  [SubmissionStatus.EXECUTED]:           [SubmissionStatus.CERTIFICATE_SENT, SubmissionStatus.SCHEDULED],
+  [SubmissionStatus.CERTIFICATE_SENT]:   [SubmissionStatus.EXECUTED],
 };
 
 const ALLOWED_WORD_MIME = [
@@ -159,11 +175,18 @@ export class SubmissionsService {
     ) ?? productFiles[0];
     const primaryFile = primaryProductFile ?? file;
 
+    // Inicializar estatus por tipo de producto (todos en 'received')
+    const initialProductStatuses: Record<string, string> = {};
+    for (const ptId of allProductTypeIds) {
+      initialProductStatuses[ptId] = SubmissionStatus.RECEIVED;
+    }
+
     // Guardar submission en BD
     const submission = this.repo.create({
       ...dto,
       referenceCode,
       productTypeIds: allProductTypeIds,
+      productStatuses: initialProductStatuses,
       status: SubmissionStatus.RECEIVED,
       ...(primaryFile && { fileName: primaryFile.originalname }),
     });
@@ -608,6 +631,52 @@ export class SubmissionsService {
     const submission = await this.findOne(id);
     submission.assignedEvaluatorId = dto.evaluatorId;
     return this.repo.save(submission);
+  }
+
+  /** Cambia el estatus de un tipo de producto científico específico dentro de la postulación */
+  async changeProductTypeStatus(id: string, dto: UpdateProductTypeStatusDto, user: User) {
+    const submission = await this.findOne(id);
+    const { productTypeId, newStatus: newStatusStr, notes } = dto;
+    const newStatus = newStatusStr as SubmissionStatus;
+
+    // Validar que el productTypeId existe en esta postulación
+    const allIds = submission.productTypeIds ?? [submission.productTypeId];
+    if (!allIds.includes(productTypeId)) {
+      throw new BadRequestException(`El tipo de producto ${productTypeId} no pertenece a esta postulación`);
+    }
+
+    const currentProductStatuses = submission.productStatuses ?? {};
+    const currentStatus = (currentProductStatuses[productTypeId] ?? SubmissionStatus.RECEIVED) as SubmissionStatus;
+    const allowed = PRODUCT_TYPE_STATUS_TRANSITIONS[currentStatus] ?? [];
+
+    if (!allowed.includes(newStatus)) {
+      throw new BadRequestException(
+        `Transición no permitida para tipo de producto: ${currentStatus} → ${newStatus}. Permitidos: ${allowed.join(', ')}`,
+      );
+    }
+
+    // Actualizar el estatus del tipo de producto
+    const updatedStatuses = { ...currentProductStatuses, [productTypeId]: newStatus };
+    await this.repo.update(id, { productStatuses: updatedStatuses });
+
+    // Notificar al postulante si se solicita
+    if (dto.notifyApplicant) {
+      const populated = await this.findOne(id);
+      try { await this.mailService.sendStatusChanged(populated, newStatus, notes); } catch { /* no bloquear */ }
+    }
+
+    // Registrar en el historial indicando el tipo de producto
+    await this.historyRepo.save(this.historyRepo.create({
+      submissionId: id,
+      previousStatus: currentStatus,
+      newStatus,
+      notes,
+      changedById: user.id,
+      notifiedApplicant: dto.notifyApplicant ?? false,
+      productTypeId,
+    }));
+
+    return this.findOne(id);
   }
 
   // ── Correo personalizado con adjunto Word opcional ──────────────────────────

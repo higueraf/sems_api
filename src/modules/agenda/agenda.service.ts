@@ -20,6 +20,7 @@ export class AgendaService {
       .createQueryBuilder('slot')
       .leftJoinAndSelect('slot.submission', 'submission')
       .leftJoinAndSelect('submission.authors', 'authors')
+      .leftJoinAndSelect('authors.country', 'authorCountry')
       .leftJoinAndSelect('submission.thematicAxis', 'submissionAxis')
       .leftJoinAndSelect('slot.thematicAxis', 'axis')
       .where('slot.eventId = :eventId', { eventId })

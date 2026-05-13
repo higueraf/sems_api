@@ -40,6 +40,10 @@ export class SubmissionStatusHistory {
   @Column({ default: false })
   notifiedApplicant: boolean;
 
+  /** Cuando está seteado, este registro corresponde al cambio de estatus de un tipo de producto específico */
+  @Column({ nullable: true })
+  productTypeId: string;
+
   @CreateDateColumn()
   createdAt: Date;
 }

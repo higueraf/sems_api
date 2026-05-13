@@ -405,6 +405,28 @@ export class MailService implements OnModuleInit {
     );
   }
 
+  /**
+   * Envía correo con certificados PDF adjuntos.
+   * Usado por CertificatesService al momento de emitir certificados.
+   */
+  async sendCertificateEmail(
+    toEmail: string,
+    toName: string,
+    subject: string,
+    html: string,
+    submissionId: string,
+    sentById: string,
+    pdfAttachments?: { buffer: Buffer; fileName: string }[],
+  ): Promise<boolean> {
+    const attachments: MailAttachment[] | undefined = pdfAttachments?.map(a => ({
+      filename: a.fileName,
+      content: a.buffer,
+      contentType: 'application/pdf',
+    }));
+    
+    return this.send(toEmail, toName, subject, html, EmailType.CERTIFICATE, submissionId, sentById, attachments);
+  }
+
   async findLogs(submissionId?: string) {
     const where = submissionId ? { relatedSubmissionId: submissionId } : {};
     return this.emailLogRepo.find({ where, order: { createdAt: 'DESC' }, take: 100 });

@@ -1,11 +1,13 @@
 export enum SubmissionStatus {
-  RECEIVED = 'received',           // Initial state on submission
-  UNDER_REVIEW = 'under_review',   // Assigned to evaluator
+  RECEIVED = 'received',                     // Initial state on submission
+  UNDER_REVIEW = 'under_review',             // Assigned to evaluator
   REVISION_REQUESTED = 'revision_requested', // Author must revise
-  APPROVED = 'approved',           // Accepted for publication/presentation
-  REJECTED = 'rejected',           // Not accepted
-  WITHDRAWN = 'withdrawn',         // Author withdrew the submission
-  SCHEDULED = 'scheduled',         // Assigned a slot in the agenda
+  APPROVED = 'approved',                     // Accepted for publication/presentation
+  REJECTED = 'rejected',                     // Not accepted
+  WITHDRAWN = 'withdrawn',                   // Author withdrew the submission
+  SCHEDULED = 'scheduled',                   // Assigned a slot in the agenda
+  EXECUTED = 'executed',                     // Work was presented/executed at the event
+  CERTIFICATE_SENT = 'certificate_sent',     // Certificate was generated and sent to authors
 }
 
 export enum AgendaSlotType {

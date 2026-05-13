@@ -20,6 +20,7 @@ import { AgendaModule } from './modules/agenda/agenda.module';
 import { MailModule } from './modules/mail/mail.module';
 import { HealthModule } from './modules/health/health.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { CertificatesModule } from './modules/certificates/certificates.module';
 
 import { User } from './entities/user.entity';
 import { Country } from './entities/country.entity';
@@ -38,6 +39,7 @@ import { AgendaSlot } from './entities/agenda-slot.entity';
 import { EmailLog } from './entities/email-log.entity';
 import { EventVideo } from './entities/event-video.entity';
 import { Workshop } from './entities/workshop.entity';
+import { Certificate } from './entities/certificate.entity';
 
 @Module({
   imports: [
@@ -61,7 +63,7 @@ import { Workshop } from './entities/workshop.entity';
           User, Country, Event, EventVideo, EventPageSection, ScientificProductType,
           ThematicAxis, Organizer, OrganizerMember, Guideline, Submission,
           SubmissionAuthor, SubmissionStatusHistory, SubmissionFile,
-          AgendaSlot, EmailLog, Workshop,
+          AgendaSlot, EmailLog, Workshop, Certificate,
         ],
         synchronize: true,
         logging: false,
@@ -82,6 +84,7 @@ import { Workshop } from './entities/workshop.entity';
     ScientificProductTypesModule,
     SubmissionsModule,
     AgendaModule,
+    CertificatesModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

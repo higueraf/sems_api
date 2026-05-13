@@ -70,6 +70,9 @@ export class Event {
   @Column({ nullable: true, type: 'int' })
   maxPresentations: number;
 
+  @Column({ type: 'jsonb', nullable: true, default: [] })
+  rooms: string[];
+
   @Column({ default: false })
   isActive: boolean;
 

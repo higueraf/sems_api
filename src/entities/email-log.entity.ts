@@ -11,6 +11,7 @@ export enum EmailType {
   CUSTOM = 'custom',
   SCHEDULE_ASSIGNED = 'schedule_assigned',
   REVISION_REQUESTED = 'revision_requested',
+  CERTIFICATE = 'certificate',
 }
 
 @Entity('email_logs')

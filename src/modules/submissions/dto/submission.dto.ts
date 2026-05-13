@@ -218,3 +218,19 @@ export class AssignEvaluatorDto {
   @IsUUID()
   evaluatorId: string;
 }
+
+export class UpdateProductTypeStatusDto {
+  @IsUUID()
+  productTypeId: string;
+
+  @IsString()
+  newStatus: string;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  notifyApplicant?: boolean;
+}

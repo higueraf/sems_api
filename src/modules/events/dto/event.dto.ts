@@ -1,5 +1,5 @@
 import {
-  IsString, IsOptional, IsBoolean, IsEnum, IsDateString, IsNumber, IsEmail,
+  IsString, IsOptional, IsBoolean, IsEnum, IsDateString, IsNumber, IsEmail, IsArray,
 } from 'class-validator';
 import { EventFormat } from '../../../common/enums/submission-status.enum';
 
@@ -66,6 +66,11 @@ export class CreateEventDto {
   @IsNumber()
   @IsOptional()
   maxPresentations?: number;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  rooms?: string[];
 
   @IsBoolean()
   @IsOptional()
