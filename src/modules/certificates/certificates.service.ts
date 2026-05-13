@@ -126,20 +126,19 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
     const G3 = '#007F3A'; // Verde de la imagen para el título
 
     // Logo principal (umayor) — ~50% más grande
-    const LS = 98;
+    const LS = 120;
     const LY = 18;
     if (opts.headerLogoBuffer) {
       try { doc.image(opts.headerLogoBuffer, CX + (CW - LS) / 2, LY, { fit: [LS, LS] }); }
       catch { /* omitir */ }
     }
-
     // Nombre del evento
     const nameY = LY + LS + 10;
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(G1)
+    doc.font('Helvetica-Bold').fontSize(16).fillColor(G1)
       .text(opts.eventName.toUpperCase(), CX, nameY, { width: CW, align: 'center', characterSpacing: 0.5 });
 
-    const subY = nameY + 16;
-    doc.font('Helvetica').fontSize(9).fillColor(TXT_L)
+    const subY = nameY + 22;
+    doc.font('Helvetica').fontSize(10).fillColor(TXT_L)
       .text(`${opts.eventCity}   ·   ${opts.eventDates}`, CX, subY, { width: CW, align: 'center' });
 
     // “Confiere el presente certificado a:”
@@ -149,7 +148,7 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
 
     // Nombre del autor — bold grande, centrado
     doc.font('Helvetica-Bold').fontSize(32).fillColor('#000000')
-      .text(opts.authorName.toUpperCase(), CX, confY + 22, { width: CW, align: 'center' });
+      .text(opts.authorName.toUpperCase(), CX, confY + 30, { width: CW, align: 'center' });
 
     // Usar doc.y para evitar solapamiento con el texto siguiente
     const afterAuthorY = doc.y + 6;
@@ -163,14 +162,16 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
     const isPonencia = ptLower.includes('ponencia') || ptLower.includes('comunicaci');
     const rolLabel = isPonencia ? 'PONENTE' : (opts.isMainAuthor ? 'AUTOR/A PRINCIPAL' : 'CO-AUTOR/A');
 
-    const rolY = afterAuthorY + 16;
+    const rolY = afterAuthorY + 15;
     doc.font('Helvetica').fontSize(12).fillColor('#555555')
-      .text('en calidad de ', CX, rolY, { width: CW, align: 'center', continued: true })
-      .font('Helvetica-Bold').fillColor(G3)
-      .text(rolLabel);
+      .text('en calidad de', CX, rolY, { width: CW, align: 'center' });
+
+    const labelY = rolY + 16;
+    doc.font('Helvetica-Bold').fontSize(20).fillColor(G3)
+      .text(rolLabel, CX, labelY, { width: CW, align: 'center' });
 
     // “por su participación con la producción científica titulada:”
-    const descY = rolY + 22;
+    const descY = labelY + 28;
     doc.font('Helvetica').fontSize(12).fillColor('#555555')
       .text('por su participación con la producción científica titulada:', CX, descY, { width: CW, align: 'center' });
 
@@ -193,15 +194,21 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
       const QR_SPACE = 110; // espacio reservado para QR a la derecha
       const footerW = W - CX - QR_SPACE; // ancho disponible para logos
       const MAX = Math.min(orgLogos.length, 6);
-      const LS2 = 58;
+      const LS2 = 65;
       const GAP = Math.max(14, Math.min(28, (footerW - MAX * LS2) / Math.max(MAX - 1, 1)));
       const totalLW = MAX * LS2 + (MAX - 1) * GAP;
       const startX = CX + (footerW - totalLW) / 2;
-      const logoY = H - 85;
+      const logoY = H - 90;
 
       for (let i = 0; i < MAX; i++) {
         try {
-          doc.image(orgLogos[i].buffer, startX + i * (LS2 + GAP), logoY, { fit: [LS2, LS2] });
+          const img = (doc as any).openImage(orgLogos[i].buffer);
+          const scale = Math.min(LS2 / img.width, LS2 / img.height);
+          const rw = img.width * scale;
+          const rh = img.height * scale;
+          const dx = startX + i * (LS2 + GAP) + (LS2 - rw) / 2;
+          const dy = logoY + (LS2 - rh) / 2;
+          doc.image(orgLogos[i].buffer, dx, dy, { width: rw, height: rh });
         } catch { /* omitir */ }
       }
     }
