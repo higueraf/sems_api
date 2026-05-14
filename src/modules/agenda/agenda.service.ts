@@ -5,6 +5,7 @@ import { AgendaSlot } from '../../entities/agenda-slot.entity';
 import { Submission } from '../../entities/submission.entity';
 import { CreateAgendaSlotDto, UpdateAgendaSlotDto, ReorderSlotsDto } from './dto/agenda.dto';
 import { MailService } from '../mail/mail.service';
+import { StorageService } from '../storage/storage.service';
 import { SubmissionStatus } from '../../common/enums/submission-status.enum';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class AgendaService {
     @InjectRepository(AgendaSlot) private repo: Repository<AgendaSlot>,
     @InjectRepository(Submission) private submissionRepo: Repository<Submission>,
     private mailService: MailService,
+    private storage: StorageService,
   ) {}
 
   async findByEvent(eventId: string, publishedOnly = false) {
@@ -30,7 +32,20 @@ export class AgendaService {
 
     if (publishedOnly) query.andWhere('slot.isPublished = true');
 
-    return query.getMany();
+    const slots = await query.getMany();
+
+    // Resolve author photo URLs (local:// → signed HTTP URL)
+    for (const slot of slots) {
+      if (slot.submission?.authors) {
+        for (const author of slot.submission.authors) {
+          if (author.photoUrl) {
+            author.photoUrl = await this.storage.getSignedUrl(author.photoUrl);
+          }
+        }
+      }
+    }
+
+    return slots;
   }
 
   async findOne(id: string) {
@@ -103,6 +118,32 @@ export class AgendaService {
       await this.mailService.sendScheduleAssigned(submission, slot);
       await this.repo.update(slot.id, { speakerNotified: true });
     }
+  }
+
+  async getEligibleSubmissions(eventId: string) {
+    // Returns all submissions with approved or under_review status.
+    // Product-type filtering (ponencia / comunicación oral) is performed on
+    // the frontend where the full product-type catalogue is available, avoiding
+    // fragile SQL string matching against potentially variable type names.
+    const subs = await this.submissionRepo
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('s.productType', 'pt')
+      .leftJoinAndSelect('s.thematicAxis', 'axis')
+      .leftJoinAndSelect('s.authors', 'authors')
+      .leftJoinAndSelect('authors.country', 'country')
+      .where('s.eventId = :eventId', { eventId })
+      .orderBy('s.referenceCode', 'ASC')
+      .getMany();
+
+    return subs.filter((s) => {
+      if (['approved', 'under_review'].includes(s.status as string)) return true;
+      if (s.productStatuses) {
+        return Object.values(s.productStatuses).some((st) =>
+          ['approved', 'under_review'].includes(st),
+        );
+      }
+      return false;
+    });
   }
 
   getAgendaDays(eventId: string) {

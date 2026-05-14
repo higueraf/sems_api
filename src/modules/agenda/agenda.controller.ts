@@ -36,6 +36,13 @@ export class AgendaController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
+  @Get('eligible-submissions')
+  getEligibleSubmissions(@Query('eventId') eventId: string) {
+    return this.agendaService.getEligibleSubmissions(eventId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.agendaService.findOne(id);

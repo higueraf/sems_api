@@ -1,6 +1,7 @@
 import {
   IsString, IsOptional, IsBoolean, IsEnum, IsDateString, IsNumber, IsEmail, IsArray,
 } from 'class-validator';
+import { PartialType } from '@nestjs/mapped-types';
 import { EventFormat } from '../../../common/enums/submission-status.enum';
 
 export class CreateEventDto {
@@ -93,7 +94,7 @@ export class CreateEventDto {
   contactPhone?: string;
 }
 
-export class UpdateEventDto extends CreateEventDto {}
+export class UpdateEventDto extends PartialType(CreateEventDto) {}
 
 export class CreateEventVideoDto {
   @IsString()
