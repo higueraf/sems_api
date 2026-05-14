@@ -18,6 +18,7 @@ import { Organizer } from '../../entities/organizer.entity';
 import { Event } from '../../entities/event.entity';
 import { SubmissionStatusHistory } from '../../entities/submission-status-history.entity';
 import { SubmissionStatus, OrganizerType } from '../../common/enums/submission-status.enum';
+import { computeGlobalStatus } from '../../common/utils/submission-status.util';
 import { StorageService } from '../storage/storage.service';
 import { MailService } from '../mail/mail.service';
 import { User } from '../../entities/user.entity';
@@ -733,7 +734,10 @@ export class CertificatesService {
         const sub = await this.submissionRepo.findOne({ where: { id: submissionId } });
         if (sub) {
           const updated = { ...(sub.productStatuses ?? {}), [productTypeId]: SubmissionStatus.CERTIFICATE_SENT };
-          await this.submissionRepo.update(submissionId, { productStatuses: updated });
+          await this.submissionRepo.update(submissionId, {
+            productStatuses: updated,
+            status: computeGlobalStatus(updated),
+          });
           await this.historyRepo.save(this.historyRepo.create({
             submissionId,
             previousStatus: SubmissionStatus.EXECUTED,

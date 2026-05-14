@@ -15,6 +15,7 @@ import {
   UpdateProductTypeStatusDto,
 } from './dto/submission.dto';
 import { SubmissionStatus } from '../../common/enums/submission-status.enum';
+import { computeGlobalStatus } from '../../common/utils/submission-status.util';
 import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
 
@@ -655,9 +656,12 @@ export class SubmissionsService {
       );
     }
 
-    // Actualizar el estatus del tipo de producto
+    // Actualizar el estatus del tipo de producto y sincronizar el estado global
     const updatedStatuses = { ...currentProductStatuses, [productTypeId]: newStatus };
-    await this.repo.update(id, { productStatuses: updatedStatuses });
+    await this.repo.update(id, {
+      productStatuses: updatedStatuses,
+      status: computeGlobalStatus(updatedStatuses),
+    });
 
     // Notificar al postulante si se solicita
     if (dto.notifyApplicant) {

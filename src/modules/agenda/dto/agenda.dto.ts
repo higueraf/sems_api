@@ -37,6 +37,10 @@ export class CreateAgendaSlotDto {
 
   @IsUUID()
   @IsOptional()
+  submissionProductTypeId?: string;
+
+  @IsUUID()
+  @IsOptional()
   thematicAxisId?: string;
 
   @IsString()

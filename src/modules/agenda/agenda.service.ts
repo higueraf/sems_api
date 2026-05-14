@@ -8,6 +8,7 @@ import { CreateAgendaSlotDto, UpdateAgendaSlotDto, ReorderSlotsDto, DeleteAgenda
 import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
 import { SubmissionStatus } from '../../common/enums/submission-status.enum';
+import { computeGlobalStatus } from '../../common/utils/submission-status.util';
 import { User } from '../../entities/user.entity';
 
 @Injectable()
@@ -87,23 +88,43 @@ export class AgendaService {
     const slot = await this.findOne(id);
     const { submissionId } = slot;
 
-    // Revert submission status and log to history before deleting the slot
+    // Revert productStatuses and log history before deleting the slot
     if (submissionId) {
       const submission = await this.submissionRepo.findOne({ where: { id: submissionId } });
-      if (submission && submission.status === SubmissionStatus.SCHEDULED) {
+      if (submission) {
         const targetStatus = (dto.revertStatus as SubmissionStatus) ?? SubmissionStatus.APPROVED;
-        const previousStatus = submission.status;
-        await this.submissionRepo.update(submissionId, { status: targetStatus });
-        await this.historyRepo.save(
-          this.historyRepo.create({
-            submissionId,
-            previousStatus,
-            newStatus: targetStatus,
-            internalNotes: `Bloque de agenda eliminado. Motivo: ${dto.reason}`,
-            changedById: user?.id ?? null,
-            notifiedApplicant: false,
-          }),
-        );
+        const ps = submission.productStatuses ?? {};
+        // Only revert the specific product type stored on the slot
+        const targetPtId = slot.submissionProductTypeId;
+        const scheduledEntries = targetPtId
+          ? Object.entries(ps).filter(([ptId, st]) => ptId === targetPtId && st === SubmissionStatus.SCHEDULED)
+          : Object.entries(ps).filter(([, st]) => st === SubmissionStatus.SCHEDULED);
+
+        if (scheduledEntries.length > 0) {
+          const updated = { ...ps };
+          for (const [ptId] of scheduledEntries) {
+            updated[ptId] = targetStatus;
+          }
+          await this.submissionRepo.update(submissionId, {
+            productStatuses: updated,
+            status: computeGlobalStatus(updated),
+          });
+
+          // One history record per product type that was reverted
+          await this.historyRepo.save(
+            scheduledEntries.map(([ptId]) =>
+              this.historyRepo.create({
+                submissionId,
+                previousStatus: SubmissionStatus.SCHEDULED,
+                newStatus: targetStatus,
+                internalNotes: `Bloque de agenda eliminado. Motivo: ${dto.reason}`,
+                productTypeId: ptId,
+                changedById: user?.id ?? null,
+                notifiedApplicant: false,
+              }),
+            ),
+          );
+        }
       }
     }
 
@@ -138,14 +159,33 @@ export class AgendaService {
 
     if (!submission) return;
 
-    // Auto-update submission status to scheduled
-    if (submission.status === SubmissionStatus.APPROVED) {
-      await this.submissionRepo.update(submissionId, { status: SubmissionStatus.SCHEDULED });
+    // Only update the specific product type linked to this slot (ponencia / comunicación oral).
+    // If none is stored on the slot, fall back to all approved entries (legacy safety net).
+    const ps = submission.productStatuses ?? {};
+    const targetPtId = slot.submissionProductTypeId;
+    const entriesToSchedule = targetPtId
+      ? Object.entries(ps).filter(([ptId, st]) => ptId === targetPtId && st === SubmissionStatus.APPROVED)
+      : Object.entries(ps).filter(([, st]) => st === SubmissionStatus.APPROVED);
+
+    if (entriesToSchedule.length > 0) {
+      const updated = { ...ps };
+      for (const [ptId] of entriesToSchedule) {
+        updated[ptId] = SubmissionStatus.SCHEDULED;
+      }
+      await this.submissionRepo.update(submissionId, {
+        productStatuses: updated,
+        status: computeGlobalStatus(updated),
+      });
     }
 
+    // Email notification — isolated so failures don't roll back the status update
     if (!slot.speakerNotified) {
-      await this.mailService.sendScheduleAssigned(submission, slot);
-      await this.repo.update(slot.id, { speakerNotified: true });
+      try {
+        await this.mailService.sendScheduleAssigned(submission, slot);
+        await this.repo.update(slot.id, { speakerNotified: true });
+      } catch {
+        // Email failed: status is already committed, log silently
+      }
     }
   }
 
@@ -164,15 +204,11 @@ export class AgendaService {
       .orderBy('s.referenceCode', 'ASC')
       .getMany();
 
-    const eligible = subs.filter((s) => {
-      if (s.status === SubmissionStatus.APPROVED) return true;
-      if (s.productStatuses) {
-        return Object.values(s.productStatuses).some(
-          (st) => st === SubmissionStatus.APPROVED,
-        );
-      }
-      return false;
-    });
+    const eligible = subs.filter((s) =>
+      s.productStatuses
+        ? Object.values(s.productStatuses).some((st) => st === SubmissionStatus.APPROVED)
+        : false,
+    );
 
     // Resolve author photo URLs (local:// → signed HTTP URL)
     for (const sub of eligible) {

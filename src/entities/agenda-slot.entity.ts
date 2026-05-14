@@ -47,6 +47,10 @@ export class AgendaSlot {
   @Column({ nullable: true })
   submissionId: string;
 
+  /** ID del tipo de producción científica específico que se agenda (ponencia / comunicación oral) */
+  @Column({ nullable: true })
+  submissionProductTypeId: string;
+
   @ManyToOne(() => ThematicAxis, (a) => a.agendaSlots, { nullable: true, eager: true })
   @JoinColumn({ name: 'thematicAxisId' })
   thematicAxis: ThematicAxis;
