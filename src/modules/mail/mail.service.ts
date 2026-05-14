@@ -99,10 +99,10 @@ export class MailService implements OnModuleInit {
         </div>
         <div style="padding:20px 30px;font-size:12px;color:#a0d8b3;">
           <div style="margin-bottom:10px;">
-            <a href="https://segundo-simposio-ciencia-abierta.netlify.app" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Sitio oficial</a>
-            <a href="https://segundo-simposio-ciencia-abierta.netlify.app/pautas" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Pautas</a>
-            <a href="https://segundo-simposio-ciencia-abierta.netlify.app/verificar" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Verificar</a>
-            <a href="https://segundo-simposio-ciencia-abierta.netlify.app/agenda" style="color:#7ee8a2;text-decoration:none;">Agenda</a>
+            <a href="https://simposio.umayor.edu.co" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Sitio oficial</a>
+            <a href="https://simposio.umayor.edu.co/pautas" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Pautas</a>
+            <a href="https://simposio.umayor.edu.co/verificar" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Verificar</a>
+            <a href="https://simposio.umayor.edu.co/agenda" style="color:#7ee8a2;text-decoration:none;">Agenda</a>
           </div>
           <div style="color:#6a8f76;">
             Este correo fue generado automáticamente por SEMS. Por favor no responda directamente.<br>
@@ -215,7 +215,7 @@ export class MailService implements OnModuleInit {
       <div style="background-color:#fffbeb;border-left:4px solid #f59e0b;padding:15px 20px;margin:20px 0;border-radius:0 4px 4px 0;">
         <p style="color:#333333;margin:0;">
           Consulte el estado de su postulación en
-          <a href="https://segundo-simposio-ciencia-abierta.netlify.app/verificar" style="color:#92400e;font-weight:600;">nuestro sitio web</a>.
+          <a href="https://simposio.umayor.edu.co/verificar" style="color:#92400e;font-weight:600;">nuestro sitio web</a>.
         </p>
       </div>
       <div style="margin-top:30px;padding-top:20px;border-top:1px solid #e0e0e0;">

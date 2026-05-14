@@ -2,12 +2,14 @@ import {
   Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query,
 } from '@nestjs/common';
 import { AgendaService } from './agenda.service';
-import { CreateAgendaSlotDto, UpdateAgendaSlotDto, ReorderSlotsDto } from './dto/agenda.dto';
+import { CreateAgendaSlotDto, UpdateAgendaSlotDto, ReorderSlotsDto, DeleteAgendaSlotDto } from './dto/agenda.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/role.enum';
+import { User } from '../../entities/user.entity';
 
 @Controller('agenda')
 @UseGuards(JwtAuthGuard)
@@ -93,7 +95,11 @@ export class AgendaController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.agendaService.remove(id);
+  remove(
+    @Param('id') id: string,
+    @Body() dto: DeleteAgendaSlotDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.agendaService.remove(id, dto, user);
   }
 }

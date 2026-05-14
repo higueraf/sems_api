@@ -67,3 +67,13 @@ export class ReorderSlotsDto {
   @IsUUID('all', { each: true })
   orderedIds: string[];
 }
+
+export class DeleteAgendaSlotDto {
+  @IsString()
+  reason: string;
+
+  @IsString()
+  @IsOptional()
+  revertStatus?: string; // defaults to 'approved' in service
+}
+
