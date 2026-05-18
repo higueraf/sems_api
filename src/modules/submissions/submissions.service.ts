@@ -360,7 +360,12 @@ export class SubmissionsService implements OnModuleInit {
     if (filters.eventId)        query.andWhere('s.eventId = :eventId',       { eventId: filters.eventId });
     if (filters.status)         query.andWhere('s.status = :status',         { status: filters.status });
     if (filters.thematicAxisId) query.andWhere('s.thematicAxisId = :axisId', { axisId: filters.thematicAxisId });
-    if (filters.productTypeId)  query.andWhere('s.productTypeId = :ptId',    { ptId: filters.productTypeId });
+    if (filters.productTypeId) {
+      query.andWhere(
+        '(s.productTypeId = :ptId OR (s.productTypeIds IS NOT NULL AND s.productTypeIds ::jsonb @> :ptIdJson ::jsonb))',
+        { ptId: filters.productTypeId, ptIdJson: JSON.stringify([filters.productTypeId]) },
+      );
+    }
     if (filters.search) {
       query.andWhere(
         `(unaccent(s.titleEs) ILIKE unaccent(:q)
