@@ -233,4 +233,9 @@ export class UpdateProductTypeStatusDto {
   @IsBoolean()
   @IsOptional()
   notifyApplicant?: boolean;
+
+  /** Código ISBN — obligatorio para Capítulo de Libro al marcar como Ejecutado */
+  @IsString()
+  @IsOptional()
+  isbnCode?: string;
 }

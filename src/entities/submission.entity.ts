@@ -127,6 +127,10 @@ export class Submission {
   @Column({ nullable: true, type: 'int' })
   pageCount: number;
 
+  /** Código ISBN para Capítulo de Libro (requerido al marcar como Ejecutado) */
+  @Column({ nullable: true })
+  isbnCode: string;
+
   @OneToMany(() => SubmissionAuthor, (a) => a.submission, { cascade: true, eager: true })
   authors: SubmissionAuthor[];
 

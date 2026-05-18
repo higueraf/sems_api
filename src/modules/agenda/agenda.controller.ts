@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query,
+  Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query, StreamableFile,
 } from '@nestjs/common';
 import { AgendaService } from './agenda.service';
 import { CreateAgendaSlotDto, UpdateAgendaSlotDto, ReorderSlotsDto, DeleteAgendaSlotDto } from './dto/agenda.dto';
@@ -43,11 +43,57 @@ export class AgendaController {
     return this.agendaService.getEligibleSubmissions(eventId);
   }
 
+  @Public()
+  @Get('pdf-public')
+  async getPdfPublic(
+    @Query('eventId') eventId: string,
+    @Query('eventName') eventName: string,
+  ) {
+    const buffer = await this.agendaService.generatePdf(eventId, eventName ?? 'Agenda', true);
+    const safe = (eventName ?? 'agenda').replace(/[^\w-]/g, '_').substring(0, 50);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${safe}.pdf"`,
+    });
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
+  @Get('pdf')
+  async getPdf(
+    @Query('eventId') eventId: string,
+    @Query('eventName') eventName: string,
+  ) {
+    const buffer = await this.agendaService.generatePdf(eventId, eventName ?? 'Agenda', false);
+    const safe = (eventName ?? 'agenda').replace(/[^\w-]/g, '_').substring(0, 50);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${safe}.pdf"`,
+    });
+  }
+
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.agendaService.findOne(id);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('notify-all')
+  notifyAll(
+    @Query('eventId') eventId: string,
+    @Query('force') force?: string,
+  ) {
+    return this.agendaService.notifyAll(eventId, force === 'true');
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/notify')
+  notifySlot(@Param('id') id: string) {
+    return this.agendaService.notifySlot(id);
   }
 
   @UseGuards(RolesGuard)

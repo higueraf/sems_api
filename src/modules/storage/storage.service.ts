@@ -46,10 +46,11 @@ export type StorageFolder =
   | 'photos'       // fotos de ponentes         → Cloudinary | local/public
   | 'submissions'  // manuscritos Word          → B2         | local/private
   | 'guidelines'   // pautas del evento (PDF)   → B2         | local/public
-  | 'identity-docs'; // documentos de identidad → B2         | local/private
+  | 'identity-docs' // documentos de identidad  → B2         | local/private
+  | 'signatures';  // firmas de organizadores   → Cloudinary | local/public
 
 /** Carpetas con acceso público (no requieren JWT para servir) */
-const PUBLIC_FOLDERS = new Set<StorageFolder>(['logos', 'photos', 'guidelines']);
+const PUBLIC_FOLDERS = new Set<StorageFolder>(['logos', 'photos', 'guidelines', 'signatures']);
 
 /** Extensiones que son imágenes → van a Cloudinary */
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg']);

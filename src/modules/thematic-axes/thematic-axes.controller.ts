@@ -20,7 +20,7 @@ export class ThematicAxesController {
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Get('admin')
   findAll(@Query('eventId') eventId: string) {
     return this.service.findByEvent(eventId, false);

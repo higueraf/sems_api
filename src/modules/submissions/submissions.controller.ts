@@ -148,7 +148,7 @@ export class SubmissionsController {
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Patch('admin/:id/assign-evaluator')
   assignEvaluator(@Param('id') id: string, @Body() dto: AssignEvaluatorDto) {
     return this.service.assignEvaluator(id, dto);
@@ -305,7 +305,7 @@ export class SubmissionsController {
 
   /** Correo con adjunto Word en base64 (JSON body) */
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Post('admin/:id/email')
   sendEmail(
     @Param('id') id: string,
@@ -317,7 +317,7 @@ export class SubmissionsController {
 
   /** Correo con adjunto Word como multipart (archivo real) */
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Post('admin/:id/email/attachment')
   @UseInterceptors(FileInterceptor('attachment', {
     storage: memoryStorage(),

@@ -68,6 +68,15 @@ export class OrganizersService {
     return this.orgRepo.save(item);
   }
 
+  async updateSignature(id: string, signatureImageUrl: string) {
+    const item = await this.findOne(id);
+    if (item.signatureImageUrl) {
+      await this.storage.delete(item.signatureImageUrl).catch(() => null);
+    }
+    item.signatureImageUrl = signatureImageUrl;
+    return this.orgRepo.save(item);
+  }
+
   async updatePhoto(id: string, photoUrl: string) {
     const item = await this.findOne(id);
     // Eliminar foto anterior de Cloudinary si existe

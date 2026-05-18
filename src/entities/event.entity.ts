@@ -91,6 +91,9 @@ export class Event {
   @Column({ nullable: true })
   contactPhone: string;
 
+  @Column({ nullable: true })
+  defaultModerator: string;
+
   @OneToMany(() => EventPageSection, (s) => s.event)
   pageSections: EventPageSection[];
 

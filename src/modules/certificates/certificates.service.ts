@@ -43,11 +43,12 @@ interface PdfOpts {
   certificateNumber: string;
   verificationUrl: string;
   headerLogoBuffer?: Buffer;
-  signatories: { name: string; title: string; institution: string }[];
+  signatories: { name: string; title: string; institution: string; signatureBuffer?: Buffer }[];
   organizerLogoBuffers: { label: string; buffer: Buffer }[];
   qrBuffer?: Buffer;
   allAuthors?: string;
   createdAt?: Date;
+  isbnCode?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,10 +143,10 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
     doc.font('Helvetica').fontSize(10).fillColor(TXT_L)
       .text(`${opts.eventCity}   ·   ${opts.eventDates}`, CX, subY, { width: CW, align: 'center' });
 
-    // “Confiere el presente certificado a:”
+    // “Otorga la presente constancia a:”
     const confY = subY + 28;
     doc.font('Helvetica').fontSize(12).fillColor('#333333')
-      .text('Confiere el presente certificado a:', CX, confY, { width: CW, align: 'center' });
+      .text('Otorga la presente constancia a:', CX, confY, { width: CW, align: 'center' });
 
     // Nombre del autor — bold grande, centrado
     doc.font('Helvetica-Bold').fontSize(32).fillColor('#000000')
@@ -189,17 +190,63 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
         .text(`Eje Temático: ${opts.thematicAxisName}`, CX, detY, { width: CW, align: 'center' });
     }
 
+    // ── Firmas del certificado ─────────────────────────────────────────────────
+    const activeSigs = (opts.signatories ?? []).filter(s => s.name).slice(0, 2);
+    const hasSigs = activeSigs.length > 0;
+
+    if (hasSigs) {
+      const sigBaseY = H - 152;
+      const sigColW = Math.floor(CW / 2) - 20;
+
+      for (let i = 0; i < activeSigs.length; i++) {
+        const sig = activeSigs[i];
+        // Columna izquierda en CX+10, columna derecha en CX + CW/2 + 10
+        const colX = CX + 10 + i * (Math.floor(CW / 2));
+
+        // Imagen de firma
+        if (sig.signatureBuffer) {
+          try {
+            const sigImg = (doc as any).openImage(sig.signatureBuffer);
+            const maxW = 110, maxH = 38;
+            const scale = Math.min(maxW / sigImg.width, maxH / sigImg.height, 1);
+            const rw = sigImg.width * scale, rh = sigImg.height * scale;
+            const imgX = colX + (sigColW - rw) / 2;
+            doc.image(sig.signatureBuffer, imgX, sigBaseY + (maxH - rh), { width: rw, height: rh });
+          } catch { /* omitir */ }
+        }
+
+        // Línea de firma
+        const lineY = sigBaseY + 42;
+        doc.moveTo(colX, lineY).lineTo(colX + sigColW, lineY)
+          .lineWidth(0.8).strokeColor('#134e2c').stroke();
+
+        // Nombre
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#111111')
+          .text(sig.name, colX, lineY + 4, { width: sigColW, align: 'center' });
+        // Cargo en el simposio
+        if (sig.title) {
+          doc.font('Helvetica').fontSize(8).fillColor('#333333')
+            .text(sig.title, colX, lineY + 15, { width: sigColW, align: 'center' });
+        }
+        // Cargo en la universidad
+        if (sig.institution) {
+          doc.font('Helvetica').fontSize(8).fillColor('#666666')
+            .text(sig.institution, colX, lineY + 25, { width: sigColW, align: 'center' });
+        }
+      }
+    }
+
     // Logos organizadores en el footer — más grandes y mejor centrados
     const orgLogos = opts.organizerLogoBuffers;
     if (orgLogos.length > 0) {
       const QR_SPACE = 110; // espacio reservado para QR a la derecha
       const footerW = W - CX - QR_SPACE; // ancho disponible para logos
       const MAX = Math.min(orgLogos.length, 6);
-      const LS2 = 65;
-      const GAP = Math.max(14, Math.min(28, (footerW - MAX * LS2) / Math.max(MAX - 1, 1)));
+      const LS2 = hasSigs ? 45 : 65;
+      const GAP = Math.max(10, Math.min(22, (footerW - MAX * LS2) / Math.max(MAX - 1, 1)));
       const totalLW = MAX * LS2 + (MAX - 1) * GAP;
       const startX = CX + (footerW - totalLW) / 2;
-      const logoY = H - 90;
+      const logoY = hasSigs ? H - 60 : H - 90;
 
       for (let i = 0; i < MAX; i++) {
         try {
@@ -217,7 +264,7 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
     // QR — esquina inferior derecha en un recuadro redondeado suave
     const QS = 55;
     const QX = W - 90;
-    const QY = H - 100;
+    const QY = hasSigs ? H - 75 : H - 100;
     
     doc.roundedRect(QX - 8, QY - 8, QS + 16, QS + 16 + 15, 8).fillColor('#f8f9fa').fill();
     
@@ -255,20 +302,6 @@ async function buildCartaPdf(opts: PdfOpts): Promise<Buffer> {
     // Fondo blanco
     doc.rect(0, 0, W, H).fillColor(WHITE).fill();
 
-    // ── Círculos y Triángulos decorativos tenues (fondo) ────────────────────
-    const drawFaintShapes = () => {
-      doc.lineWidth(4).strokeColor('#f4f4f4');
-      // Arriba izquierda
-      doc.circle(60, 180, 25).stroke();
-      doc.polygon([40, 260], [20, 300], [60, 300]).stroke();
-      // Abajo derecha
-      doc.circle(W - 60, H - 200, 30).stroke();
-      doc.circle(W - 80, H - 280, 20).stroke();
-      doc.polygon([W - 50, 400], [W - 20, 460], [W - 80, 460]).stroke();
-      // Centro tenue
-      doc.circle(W / 2 + 100, H / 2 + 150, 45).stroke();
-    };
-    drawFaintShapes();
 
     // ── Logo Superior (umayor) ──────────────────────────────────────────────
     if (opts.headerLogoBuffer) {
@@ -292,7 +325,7 @@ async function buildCartaPdf(opts: PdfOpts): Promise<Buffer> {
     const contentY = sepY + 30;
     
     doc.font('Helvetica-Bold').fontSize(11).fillColor(BLACK)
-      .text('SE CERTIFICA QUE:', 60, contentY);
+      .text('SE HACE CONSTAR QUE:', 60, contentY);
 
     const textY = contentY + 20;
     const authorsStr = opts.allAuthors || opts.authorName;
@@ -317,18 +350,19 @@ async function buildCartaPdf(opts: PdfOpts): Promise<Buffer> {
     doc.moveDown(1.5);
 
     // Párrafo 2
+    const isbnStr = opts.isbnCode ? `ISBN ${opts.isbnCode}` : 'ISBN 978-628-97432-7-2 (impreso) y 978-628-97432-9-6 (digital)';
     doc.font('Helvetica')
       .text('Este capítulo forma parte del libro de investigación ', { continued: true, width: W - 120, align: 'justify', lineGap: 3 })
       .font('Helvetica-Bold')
-      .text('“INNOVACIÓN EN ACCIÓN: SOLUCIONES TECNOLÓGICAS QUE TRANSFORMAN SALUD, INDUSTRIA Y SOCIEDAD”', { continued: true })
+      .text('”INNOVACIÓN EN ACCIÓN: SOLUCIONES TECNOLÓGICAS QUE TRANSFORMAN SALUD, INDUSTRIA Y SOCIEDAD”', { continued: true })
       .font('Helvetica')
-      .text(', con ISBN físico 978-628-97432-7-2 y electrónico 978-628-97432-9-6, el cual será publicado por el Sello Editorial de la Institución Universitaria Mayor de Cartagena (UMAYOR), conforme a sus políticas de calidad editorial, procesos de gestión científica y lineamientos para la producción de nuevo conocimiento.');
+      .text(`, con ${isbnStr}, el cual será publicado por el Sello Editorial de la Institución Universitaria Mayor de Cartagena (UMAYOR), conforme a sus políticas de calidad editorial, procesos de gestión científica y lineamientos para la producción de nuevo conocimiento.`);
 
     doc.moveDown(1.5);
 
     // Párrafo 3
     doc.font('Helvetica')
-      .text('El manuscrito fue evaluado bajo criterios de rigurosidad científica y solidez metodológica, cumpliendo con los estándares para publicaciones de nuevo conocimiento. Este capítulo se integra a la obra bajo el ISBN impreso 978-628-97432-7-2 y ISBN digital 978-628-97432-9-6.', { width: W - 120, align: 'justify', lineGap: 3 });
+      .text(`El manuscrito fue evaluado bajo criterios de rigurosidad científica y solidez metodológica, cumpliendo con los estándares para publicaciones de nuevo conocimiento. Este capítulo se integra a la obra bajo el ${isbnStr}.`, { width: W - 120, align: 'justify', lineGap: 3 });
 
     doc.moveDown(1.5);
 
@@ -364,27 +398,26 @@ async function buildCartaPdf(opts: PdfOpts): Promise<Buffer> {
     doc.font('Helvetica').fontSize(9).fillColor('#666666')
       .text('Cartagena de Indias - Centro Histórico - K3 # 36-95 Calle de la Factoría', 0, footerY + 15, { align: 'center', width: W });
 
-    // ── Patrón Geométrico Inferior ──────────────────────────────────────────
-    const patternY = H - 35;
-    const colors = ['#e63946', '#f4a261', '#e9c46a', '#2a9d8f', '#264653', '#e63946', '#f4a261', '#e9c46a', '#2a9d8f', '#264653'];
-    const sW = W / 10;
-    
-    for (let i = 0; i < 10; i++) {
-      const cx = i * sW + sW / 2;
-      const cy = patternY + 15;
-      doc.lineWidth(4).strokeColor(colors[i]);
-      
-      if (i % 3 === 0) {
-        // Cuadrado hueco
-        doc.rect(cx - 8, cy - 8, 16, 16).stroke();
-      } else if (i % 3 === 1) {
-        // Círculo hueco
-        doc.circle(cx, cy, 9).stroke();
-      } else {
-        // Triángulo hueco
-        doc.polygon([cx, cy - 9], [cx - 10, cy + 8], [cx + 10, cy + 8]).stroke();
-      }
-    }
+    // ── Rayas curvas verdes en la parte inferior (estilo diploma) ────────────────
+    const Gw1 = '#134e2c';
+    const Gw2 = '#1b5e3b';
+    const Gw3 = '#2e8b57';
+    const Gw4 = '#52b788';
+    const Gw5 = '#d8f3dc';
+
+    const drawBottomWave = (color: string, leftY: number, rightY: number, cpOffset: number) => {
+      doc.fillColor(color)
+        .moveTo(0, H).lineTo(W, H)
+        .lineTo(W, rightY)
+        .bezierCurveTo(W * 0.65, rightY - cpOffset, W * 0.35, leftY - cpOffset, 0, leftY)
+        .closePath().fill();
+    };
+
+    drawBottomWave(Gw5, H - 40, H - 25, 12);
+    drawBottomWave(Gw4, H - 30, H - 18,  9);
+    drawBottomWave(Gw3, H - 22, H - 13,  7);
+    drawBottomWave(Gw2, H - 14, H -  8,  5);
+    drawBottomWave(Gw1, H -  6, H -  3,  2);
     
     doc.end();
   });
@@ -502,17 +535,24 @@ export class CertificatesService {
     return (await this.resolveLogoBuffer(org.logoUrl)) ?? undefined;
   }
 
-  /** Retorna hasta 3 firmantes (organizadores tipo persona) */
-  private async getSignatories(eventId: string): Promise<{ name: string; title: string; institution: string }[]> {
+  /** Retorna hasta 2 firmantes del certificado de ponencia (signsPonenCert = true) */
+  private async getSignatories(eventId: string): Promise<{ name: string; title: string; institution: string; signatureBuffer?: Buffer }[]> {
     const persons = await this.organizerRepo.find({
-      where: { eventId, isVisible: true, type: OrganizerType.PERSON },
+      where: { eventId, isVisible: true, type: OrganizerType.PERSON, signsPonenCert: true },
       order: { displayOrder: 'ASC' },
-      take: 3,
+      take: 2,
     });
-    return persons.map(p => ({
-      name: [p.title, p.name].filter(Boolean).join(' '),
-      title: p.institutionalPosition ?? '',
-      institution: p.description ?? '',
+    return Promise.all(persons.map(async (p) => {
+      let signatureBuffer: Buffer | undefined;
+      if (p.signatureImageUrl) {
+        signatureBuffer = (await this.resolveLogoBuffer(p.signatureImageUrl)) ?? undefined;
+      }
+      return {
+        name: [p.title, p.name].filter(Boolean).join(' '),
+        title: p.institutionalPosition ?? '',       // cargo en la universidad
+        institution: p.description ?? '',           // cargo en el simposio
+        signatureBuffer,
+      };
     }));
   }
 
@@ -543,7 +583,7 @@ export class CertificatesService {
       this.getSignatories(submission.eventId),
     ]);
 
-    const appUrl = this.config.get<string>('app.url') || 'http://localhost:5173';
+    const appUrl = this.config.get<string>('frontendUrl') || 'http://localhost:5173';
     const created: Certificate[] = [];
 
     for (const author of submission.authors) {
@@ -571,6 +611,13 @@ export class CertificatesService {
         this.logger.warn(`No se pudo generar QR para ${verificationCode}: ${err.message}`);
       }
 
+      const ptNameLower = (productType?.name ?? '').toLowerCase();
+      const isBookChapter = ptNameLower.includes('cap') && ptNameLower.includes('libro');
+      const certStyle: 'diploma' | 'carta' = isBookChapter ? 'carta' : 'diploma';
+
+      // Obtener todos los autores para la carta
+      const allAuthorsStr = submission.authors.map(a => a.fullName).join(', ');
+
       let pdfBufferDiploma: Buffer;
       try {
         const pdfOpts = {
@@ -588,8 +635,10 @@ export class CertificatesService {
           signatories,
           organizerLogoBuffers: organizerLogos,
           qrBuffer,
+          allAuthors: allAuthorsStr,
+          isbnCode: submission.isbnCode ?? undefined,
         };
-        pdfBufferDiploma = await buildCertificatePdf(pdfOpts, 'diploma');
+        pdfBufferDiploma = await buildCertificatePdf(pdfOpts, certStyle);
       } catch (err) {
         this.logger.error(`Error generando PDFs certificado para ${author.fullName}: ${err.message}`);
         throw new BadRequestException('Error al generar los PDFs del certificado');
@@ -680,7 +729,7 @@ export class CertificatesService {
       }
 
       const author      = cert.author;
-      const appUrl      = this.config.get<string>('app.url') || 'http://localhost:5173';
+      const appUrl      = this.config.get<string>('frontendUrl') || 'http://localhost:5173';
       const verifyUrl   = `${appUrl}/certificado/${cert.verificationCode}`;
 
       const html = this.buildCertificateEmailHtml(
@@ -874,19 +923,19 @@ export class CertificatesService {
     const shortTitle = titleEs.length > 80 ? titleEs.substring(0, 80) + '...' : titleEs;
     return `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"><title>Certificado de Participación</title></head>
+<head><meta charset="UTF-8"><title>Constancia de Participación</title></head>
 <body style="margin:0;padding:0;background-color:#f0f4f1;font-family:Arial,Helvetica,sans-serif;">
   <div style="background-color:#f0f4f1;padding:20px 0;">
     <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.1);">
       <div style="background-color:#003918;padding:20px 30px;color:white;">
         <div style="font-size:11px;color:#7ee8a2;text-transform:uppercase;margin-bottom:5px;">II Simposio Internacional de Ciencia Abierta</div>
-        <h1 style="margin:0;font-size:22px;font-weight:bold;">Certificado de Participación</h1>
+        <h1 style="margin:0;font-size:22px;font-weight:bold;">Constancia de Participación</h1>
         <p style="margin:5px 0 0;font-size:13px;color:#a7f3d0;">Documento oficial del evento</p>
       </div>
       <div style="padding:30px;">
         <p style="color:#374840;font-size:15px;">Estimado/a <strong>${authorName}</strong>,</p>
         <p style="color:#374840;font-size:14px;line-height:1.6;">
-          Es un placer hacerle entrega de su <strong>Certificado de Participación</strong> en el
+          Es un placer hacerle entrega de su <strong>Constancia de Participación</strong> en el
           <strong>II Simposio Internacional de Ciencia Abierta 2026</strong>.
         </p>
         <div style="background:#f0f9f4;border-left:4px solid #003918;padding:16px;margin:20px 0;border-radius:4px;">

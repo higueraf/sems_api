@@ -64,6 +64,10 @@ export class CreateOrganizerDto {
   @IsBoolean()
   @IsOptional()
   isVisible?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  signsPonenCert?: boolean;
 }
 
 export class UpdateOrganizerDto extends CreateOrganizerDto {}

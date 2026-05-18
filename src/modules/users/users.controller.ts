@@ -14,6 +14,7 @@ import { UserRole } from '../../common/enums/role.enum';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Get()
   findAll() {
     return this.usersService.findAll();

@@ -1,8 +1,8 @@
 import {
-  Injectable, NotFoundException, BadRequestException, Logger,
+  Injectable, NotFoundException, BadRequestException, Logger, OnModuleInit,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { Submission } from '../../entities/submission.entity';
 import { SubmissionAuthor } from '../../entities/submission-author.entity';
 import { SubmissionStatusHistory } from '../../entities/submission-status-history.entity';
@@ -68,7 +68,7 @@ function getAllowedMimesForFormats(formats?: string): string[] {
 }
 
 @Injectable()
-export class SubmissionsService {
+export class SubmissionsService implements OnModuleInit {
   private readonly logger = new Logger(SubmissionsService.name);
 
   constructor(
@@ -78,7 +78,16 @@ export class SubmissionsService {
     @InjectRepository(SubmissionFile)           private fileRepo: Repository<SubmissionFile>,
     @InjectRepository(ScientificProductType)    private productTypeRepo: Repository<ScientificProductType>,
     private mailService: MailService,
+    @InjectDataSource() private dataSource: DataSource,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.dataSource.query('CREATE EXTENSION IF NOT EXISTS unaccent');
+    } catch {
+      this.logger.warn('unaccent extension not available; accent-insensitive search disabled');
+    }
+  }
 
   private generateReferenceCode(): string {
     const year   = new Date().getFullYear();
@@ -354,7 +363,11 @@ export class SubmissionsService {
     if (filters.productTypeId)  query.andWhere('s.productTypeId = :ptId',    { ptId: filters.productTypeId });
     if (filters.search) {
       query.andWhere(
-        '(s.titleEs ILIKE :q OR s.referenceCode ILIKE :q OR authors.fullName ILIKE :q OR authors.email ILIKE :q)',
+        `(unaccent(s.titleEs) ILIKE unaccent(:q)
+          OR unaccent(s.titleEn) ILIKE unaccent(:q)
+          OR unaccent(s.referenceCode) ILIKE unaccent(:q)
+          OR unaccent(authors.fullName) ILIKE unaccent(:q)
+          OR unaccent(authors.email) ILIKE unaccent(:q))`,
         { q: `%${filters.search}%` },
       );
     }
@@ -656,12 +669,24 @@ export class SubmissionsService {
       );
     }
 
+    // Si el nuevo estatus es 'executed', validar ISBN para Capítulo de Libro
+    if (newStatus === SubmissionStatus.EXECUTED) {
+      const pt = await this.productTypeRepo.findOne({ where: { id: productTypeId } });
+      const isBookChapter = (pt?.name ?? '').toLowerCase().replace(/[áa]/g, 'a').includes('cap') &&
+        (pt?.name ?? '').toLowerCase().includes('libro');
+      if (isBookChapter && !dto.isbnCode?.trim()) {
+        throw new BadRequestException('El código ISBN es obligatorio para marcar un Capítulo de Libro como Ejecutado');
+      }
+    }
+
     // Actualizar el estatus del tipo de producto y sincronizar el estado global
     const updatedStatuses = { ...currentProductStatuses, [productTypeId]: newStatus };
-    await this.repo.update(id, {
+    const updatePayload: Partial<Submission> = {
       productStatuses: updatedStatuses,
       status: computeGlobalStatus(updatedStatuses),
-    });
+    };
+    if (dto.isbnCode?.trim()) updatePayload.isbnCode = dto.isbnCode.trim();
+    await this.repo.update(id, updatePayload);
 
     // Notificar al postulante si se solicita
     if (dto.notifyApplicant) {
