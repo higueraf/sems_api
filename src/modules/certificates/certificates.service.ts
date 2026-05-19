@@ -149,9 +149,16 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
     doc.font('Helvetica').fontSize(12).fillColor('#333333')
       .text('Otorga la presente constancia a:', CX, confY, { width: CW, align: 'center' });
 
-    // Nombre del autor — bold grande, centrado
-    doc.font('Helvetica-Bold').fontSize(32).fillColor('#000000')
-      .text(opts.authorName.toUpperCase(), CX, confY + 30, { width: CW, align: 'center' });
+    // Nombre del autor — bold grande, centrado; auto-escala para caber en una línea
+    const nameStr = opts.authorName.toUpperCase();
+    let nameFontSize = 32;
+    doc.font('Helvetica-Bold');
+    while (nameFontSize > 18) {
+      doc.fontSize(nameFontSize);
+      if (doc.widthOfString(nameStr) <= CW - 10) break;
+      nameFontSize -= 1;
+    }
+    doc.fillColor('#000000').text(nameStr, CX, confY + 30, { width: CW, align: 'center', lineBreak: false });
 
     // Usar doc.y para evitar solapamiento con el texto siguiente
     const afterAuthorY = doc.y + 6;
@@ -982,10 +989,14 @@ export class CertificatesService {
 
   private formatEventDates(event: Event | null): string {
     if (!event?.startDate) return '2026';
-    const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
-    if (!event.endDate || event.startDate === event.endDate) return fmt(new Date(event.startDate));
+    // Usar UTC para evitar desfase de zona horaria (las fechas se guardan como YYYY-MM-DD en UTC)
+    const utcDay  = (d: Date) => d.getUTCDate();
+    const utcFmt  = (d: Date) => d.toLocaleDateString('es-ES', {
+      day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+    });
     const s = new Date(event.startDate);
+    if (!event.endDate || event.startDate === event.endDate) return utcFmt(s);
     const e = new Date(event.endDate);
-    return `${s.getDate()}–${e.getDate()} de ${e.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`;
+    return `${utcDay(s)}–${utcDay(e)} de ${e.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' })}`;
   }
 }
