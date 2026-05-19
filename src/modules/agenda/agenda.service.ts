@@ -315,14 +315,20 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
     );
   }
 
-  // Pre-fetch all speaker photos
+  // Pre-fetch all speaker photos and country flags
   const photoCache = new Map<string, Buffer>();
+  const flagCache  = new Map<string, Buffer>();
   for (const slot of slots) {
     const auth = slot.submission?.authors?.find((a: any) => a.isCorresponding) ?? slot.submission?.authors?.[0];
     const url: string | undefined = (auth as any)?.photoUrl;
     if (url && !photoCache.has(url)) {
       const buf = await fetchPhotoBuffer(url);
       if (buf) photoCache.set(url, buf);
+    }
+    const code = flagToCode((auth as any)?.country?.flagEmoji || '');
+    if (code && !flagCache.has(code)) {
+      const buf = await fetchPhotoBuffer(`https://flagcdn.com/w20/${code.toLowerCase()}.png`);
+      if (buf) flagCache.set(code, buf);
     }
   }
 
@@ -428,11 +434,14 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
           ?? slot.submission?.authors?.[0];
         const speaker   = slot.speakerName || (auth as any)?.fullName || '';
         const affil     = slot.speakerAffiliation || (auth as any)?.affiliation || '';
-        const title     = slot.submission?.titleEs || slot.title || '';
+        // Normalize title: strip newlines/extra spaces that inflate row height
+        const title     = (slot.submission?.titleEs || slot.title || '')
+                            .replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
         const axis      = slot.thematicAxis || (slot.submission as any)?.thematicAxis;
         const photoUrl  = (auth as any)?.photoUrl as string | undefined;
         const photoBuf  = photoUrl ? photoCache.get(photoUrl) : undefined;
         const countryCode = flagToCode((auth as any)?.country?.flagEmoji || '');
+        const flagBuf   = countryCode ? flagCache.get(countryCode) : undefined;
         const initials  = speaker
           ? speaker.split(' ').slice(0, 2).map((w: string) => w[0] ?? '').join('').toUpperCase()
           : '';
@@ -480,9 +489,15 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
           iy += doc.heightOfString(title, { width: CON_W - 4 }) + 2;
         }
         if (speaker) {
-          const speakerLine = countryCode ? `${speaker}  (${countryCode})` : speaker;
           doc.fillColor('#333333').font('Helvetica').fontSize(8.5)
-             .text(speakerLine, CON_X, iy, { width: CON_W - 4, lineBreak: false });
+             .text(speaker, CON_X, iy, { width: CON_W - 4, lineBreak: false });
+          if (flagBuf) {
+            const nameW = Math.min(
+              doc.widthOfString(speaker, { lineBreak: false } as any),
+              CON_W - 26,
+            );
+            try { doc.image(flagBuf, CON_X + nameW + 5, iy + 0.5, { height: 11 }); } catch { /* */ }
+          }
           iy += 12;
         }
         if (affil) {
