@@ -440,8 +440,9 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
         const slot = daySlots[ri];
         const auth = slot.submission?.authors?.find((a: any) => a.isCorresponding)
           ?? slot.submission?.authors?.[0];
-        const speaker   = slot.speakerName || (auth as any)?.fullName || '';
-        const affil     = stripHtml(slot.speakerAffiliation || (auth as any)?.affiliation || '');
+        const rawSpeaker = slot.speakerName || (auth as any)?.fullName || '';
+        const speaker    = rawSpeaker.replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        const affil      = stripHtml(slot.speakerAffiliation || (auth as any)?.affiliation || '');
         // Strip HTML, normalize whitespace, truncate to prevent inflated row heights
         const titleRaw  = stripHtml(slot.submission?.titleEs || slot.title || '');
         const title     = titleRaw.length > 220 ? titleRaw.slice(0, 217) + '…' : titleRaw;
@@ -495,7 +496,7 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
         if (title) {
           doc.fillColor('#111111').font('Helvetica-Bold').fontSize(9)
              .text(title, CON_X, iy, { width: CON_W - 4 });
-          iy += doc.heightOfString(title, { width: CON_W - 4 }) + 2;
+          iy = doc.y + 2;  // use actual cursor position after rendering
         }
         if (speaker) {
           doc.fillColor('#333333').font('Helvetica').fontSize(8.5)
