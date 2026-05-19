@@ -442,8 +442,9 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
           ?? slot.submission?.authors?.[0];
         const speaker   = slot.speakerName || (auth as any)?.fullName || '';
         const affil     = stripHtml(slot.speakerAffiliation || (auth as any)?.affiliation || '');
-        // Strip HTML tags and normalize whitespace to prevent inflated row heights
-        const title     = stripHtml(slot.submission?.titleEs || slot.title || '');
+        // Strip HTML, normalize whitespace, truncate to prevent inflated row heights
+        const titleRaw  = stripHtml(slot.submission?.titleEs || slot.title || '');
+        const title     = titleRaw.length > 220 ? titleRaw.slice(0, 217) + '…' : titleRaw;
         const axis      = slot.thematicAxis || (slot.submission as any)?.thematicAxis;
         const photoUrl  = (auth as any)?.photoUrl as string | undefined;
         const photoBuf  = photoUrl ? photoCache.get(photoUrl) : undefined;
@@ -454,9 +455,10 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
           : '';
 
         doc.font('Helvetica-Bold').fontSize(9);
-        const titleH = title ? doc.heightOfString(title, { width: CON_W - 4 }) : 0;
-        let rowH = 10 + titleH + (speaker ? 15 : 0) + (affil ? 11 : 0) + (axis ? 14 : 0) + 8;
+        const titleH = title ? Math.min(doc.heightOfString(title, { width: CON_W - 4 }), 90) : 0;
+        let rowH = 10 + titleH + (speaker ? 18 : 0) + (affil ? 11 : 0) + (axis ? 15 : 0) + 8;
         rowH = Math.max(rowH, PH_R * 2 + 12); // ensure photo fits
+        rowH = Math.min(rowH, 190);            // hard cap — prevents runaway rows
 
         chkBreak(rowH + 2);
         const ry = yPos;
@@ -505,7 +507,7 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
             );
             try { doc.image(flagBuf, CON_X + nameW + 5, iy + 1, { height: 10 }); } catch { /* */ }
           }
-          iy += 15; // extra room so flag doesn't overlap next line
+          iy += 18; // extra room so flag doesn't overlap next line
         }
         if (affil) {
           doc.fillColor('#888888').font('Helvetica').fontSize(7.5)
