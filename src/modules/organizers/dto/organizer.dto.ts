@@ -118,6 +118,10 @@ export class CreateMemberDto {
   @IsBoolean()
   @IsOptional()
   isVisible?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  signsPonenCert?: boolean;
 }
 
 export class UpdateMemberDto extends CreateMemberDto {}

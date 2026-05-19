@@ -146,7 +146,7 @@ export class StorageService {
     const isImage = IMAGE_EXT.has(ext);
 
     // Imágenes → Cloudinary o disco local
-    if (isImage && (folder === 'logos' || folder === 'photos')) {
+    if (isImage && (folder === 'logos' || folder === 'photos' || folder === 'signatures')) {
       if (this.cloudinaryOk) return this.toCloudinary(file, folder, nameHint);
       return this.toLocalDisk(file, folder, nameHint);
     }

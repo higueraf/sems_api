@@ -299,6 +299,16 @@ export class SubmissionsController {
     return this.service.updateAuthorPhoto(authorId, null, this.storage);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Patch('authors/:authorId/presenter')
+  setPresenter(
+    @Param('authorId') authorId: string,
+    @Body('isPresenter') isPresenter: boolean,
+  ) {
+    return this.service.setAuthorPresenter(authorId, isPresenter);
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // CORREOS
   // ════════════════════════════════════════════════════════════════════════════

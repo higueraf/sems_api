@@ -164,6 +164,22 @@ export class OrganizersController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
+  @Post('members/:id/signature')
+  @UseInterceptors(FileInterceptor('signature', {
+    storage: memStorage,
+    fileFilter: imageFilter,
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
+  async uploadMemberSignature(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const url = await this.storage.upload(file, 'signatures', `sig-member-${id}`);
+    return this.service.updateMemberSignature(id, url);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Delete('members/:id')
   removeMember(@Param('id') id: string) {
     return this.service.removeMember(id);

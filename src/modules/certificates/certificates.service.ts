@@ -15,6 +15,7 @@ import { Submission } from '../../entities/submission.entity';
 import { SubmissionAuthor } from '../../entities/submission-author.entity';
 import { ScientificProductType } from '../../entities/scientific-product-type.entity';
 import { Organizer } from '../../entities/organizer.entity';
+import { OrganizerMember } from '../../entities/organizer-member.entity';
 import { Event } from '../../entities/event.entity';
 import { SubmissionStatusHistory } from '../../entities/submission-status-history.entity';
 import { SubmissionStatus, OrganizerType } from '../../common/enums/submission-status.enum';
@@ -195,43 +196,41 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
     const hasSigs = activeSigs.length > 0;
 
     if (hasSigs) {
-      const sigBaseY = H - 152;
+      const sigBaseY = H - 185;
       const sigColW = Math.floor(CW / 2) - 20;
+      // Borde izquierdo del recuadro del QR (QX = W-90, rect empieza 8px antes)
+      const QX_RECT = W - 98;
 
       for (let i = 0; i < activeSigs.length; i++) {
         const sig = activeSigs[i];
-        // Columna izquierda en CX+10, columna derecha en CX + CW/2 + 10
-        const colX = CX + 10 + i * (Math.floor(CW / 2));
+        const colX = CX + 10 + i * Math.floor(CW / 2);
+        // Segunda columna: recortar ancho para no solapar el QR
+        const colW = i === 1 ? Math.min(sigColW, QX_RECT - colX - 8) : sigColW;
 
         // Imagen de firma
         if (sig.signatureBuffer) {
           try {
             const sigImg = (doc as any).openImage(sig.signatureBuffer);
-            const maxW = 110, maxH = 38;
+            const maxW = 200, maxH = 85;
             const scale = Math.min(maxW / sigImg.width, maxH / sigImg.height, 1);
             const rw = sigImg.width * scale, rh = sigImg.height * scale;
-            const imgX = colX + (sigColW - rw) / 2;
+            const imgX = colX + (colW - rw) / 2;
             doc.image(sig.signatureBuffer, imgX, sigBaseY + (maxH - rh), { width: rw, height: rh });
           } catch { /* omitir */ }
         }
 
         // Línea de firma
-        const lineY = sigBaseY + 42;
-        doc.moveTo(colX, lineY).lineTo(colX + sigColW, lineY)
+        const lineY = sigBaseY + 88;
+        doc.moveTo(colX, lineY).lineTo(colX + colW, lineY)
           .lineWidth(0.8).strokeColor('#134e2c').stroke();
 
-        // Nombre
+        // Nombre (título académico + nombre completo)
         doc.font('Helvetica-Bold').fontSize(9).fillColor('#111111')
-          .text(sig.name, colX, lineY + 4, { width: sigColW, align: 'center' });
-        // Cargo en el simposio
+          .text(sig.name, colX, lineY + 5, { width: colW, align: 'center' });
+        // Cargo institucional
         if (sig.title) {
-          doc.font('Helvetica').fontSize(8).fillColor('#333333')
-            .text(sig.title, colX, lineY + 15, { width: sigColW, align: 'center' });
-        }
-        // Cargo en la universidad
-        if (sig.institution) {
-          doc.font('Helvetica').fontSize(8).fillColor('#666666')
-            .text(sig.institution, colX, lineY + 25, { width: sigColW, align: 'center' });
+          doc.font('Helvetica').fontSize(8).fillColor('#444444')
+            .text(sig.title, colX, lineY + 17, { width: colW, align: 'center' });
         }
       }
     }
@@ -457,6 +456,7 @@ export class CertificatesService {
     @InjectRepository(SubmissionAuthor)    private authorRepo: Repository<SubmissionAuthor>,
     @InjectRepository(ScientificProductType) private productTypeRepo: Repository<ScientificProductType>,
     @InjectRepository(Organizer)           private organizerRepo: Repository<Organizer>,
+    @InjectRepository(OrganizerMember)     private memberRepo: Repository<OrganizerMember>,
     @InjectRepository(Event)               private eventRepo: Repository<Event>,
     @InjectRepository(SubmissionStatusHistory) private historyRepo: Repository<SubmissionStatusHistory>,
     private readonly storage: StorageService,
@@ -495,7 +495,8 @@ export class CertificatesService {
       const resolvedUrl = await this.storage.getSignedUrl(logoUrl, 300);
       if (!resolvedUrl) return null;
       return await fetchImageBuffer(resolvedUrl);
-    } catch {
+    } catch (err: any) {
+      this.logger.warn(`resolveLogoBuffer failed for ${logoUrl}: ${err?.message}`);
       return null;
     }
   }
@@ -537,20 +538,29 @@ export class CertificatesService {
 
   /** Retorna hasta 2 firmantes del certificado de ponencia (signsPonenCert = true) */
   private async getSignatories(eventId: string): Promise<{ name: string; title: string; institution: string; signatureBuffer?: Buffer }[]> {
-    const persons = await this.organizerRepo.find({
-      where: { eventId, isVisible: true, type: OrganizerType.PERSON, signsPonenCert: true },
-      order: { displayOrder: 'ASC' },
-      take: 2,
-    });
-    return Promise.all(persons.map(async (p) => {
+    // Query members of institutions that belong to this event
+    const members = await this.memberRepo
+      .createQueryBuilder('m')
+      .innerJoin('m.organizer', 'org', 'org.eventId = :eventId AND org.isVisible = true', { eventId })
+      .where('m.signsPonenCert = true')
+      .orderBy('m.displayOrder', 'ASC')
+      .take(2)
+      .getMany();
+
+    this.logger.log(`getSignatories: found ${members.length} signer(s) for event ${eventId}`);
+
+    return Promise.all(members.map(async (m) => {
       let signatureBuffer: Buffer | undefined;
-      if (p.signatureImageUrl) {
-        signatureBuffer = (await this.resolveLogoBuffer(p.signatureImageUrl)) ?? undefined;
+      if (m.signatureImageUrl) {
+        signatureBuffer = (await this.resolveLogoBuffer(m.signatureImageUrl)) ?? undefined;
+        this.logger.log(`Signer ${m.fullName}: signatureUrl=${m.signatureImageUrl} resolved=${!!signatureBuffer}`);
+      } else {
+        this.logger.warn(`Signer ${m.fullName} has no signatureImageUrl`);
       }
       return {
-        name: [p.title, p.name].filter(Boolean).join(' '),
-        title: p.institutionalPosition ?? '',       // cargo en la universidad
-        institution: p.description ?? '',           // cargo en el simposio
+        name: [m.academicTitle, m.fullName].filter(Boolean).join(' '),
+        title: m.institutionalPosition ?? '',
+        institution: '',
         signatureBuffer,
       };
     }));
@@ -586,7 +596,14 @@ export class CertificatesService {
     const appUrl = this.config.get<string>('frontendUrl') || 'http://localhost:5173';
     const created: Certificate[] = [];
 
-    for (const author of submission.authors) {
+    // Si hay un único autor → siempre se le genera el certificado.
+    // Si hay varios autores → solo los marcados explícitamente como ponentes (isPresenter).
+    const presenters = submission.authors.filter(a => a.isPresenter);
+    const targetAuthors = submission.authors.length === 1
+      ? submission.authors
+      : presenters;
+
+    for (const author of targetAuthors) {
       let existing = await this.certRepo.findOne({
         where: { submissionId, authorId: author.id, productTypeId },
       });

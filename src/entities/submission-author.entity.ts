@@ -96,6 +96,10 @@ export class SubmissionAuthor {
   @Column({ nullable: true })
   identityDocFileName: string;
 
+  /** Marcado como ponente: recibirá el certificado de ponencia */
+  @Column({ default: true })
+  isPresenter: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

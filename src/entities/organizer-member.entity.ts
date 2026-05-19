@@ -76,6 +76,14 @@ export class OrganizerMember {
   @Column({ default: true })
   isVisible: boolean;
 
+  /** Aparece como firmante en el certificado de ponencia */
+  @Column({ default: false })
+  signsPonenCert: boolean;
+
+  /** Imagen de la firma manuscrita para el certificado */
+  @Column({ nullable: true, type: 'text' })
+  signatureImageUrl: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

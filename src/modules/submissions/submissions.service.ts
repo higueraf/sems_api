@@ -806,6 +806,13 @@ export class SubmissionsService implements OnModuleInit {
     return this.authorRepo.save(author);
   }
 
+  async setAuthorPresenter(authorId: string, isPresenter: boolean) {
+    const author = await this.authorRepo.findOne({ where: { id: authorId } });
+    if (!author) throw new NotFoundException('Author not found');
+    author.isPresenter = isPresenter;
+    return this.authorRepo.save(author);
+  }
+
   // ── Descarga de manuscrito activo ───────────────────────────────────────────
 
   async getDownloadUrl(id: string, storage: StorageService) {

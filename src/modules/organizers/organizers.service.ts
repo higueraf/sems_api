@@ -125,11 +125,19 @@ export class OrganizersService {
 
   async updateMemberPhoto(id: string, photoUrl: string) {
     const m = await this.findMember(id);
-    // Eliminar foto anterior de Cloudinary si existe
     if (m.photoUrl) {
       await this.storage.delete(m.photoUrl).catch(() => null);
     }
     m.photoUrl = photoUrl;
+    return this.memberRepo.save(m);
+  }
+
+  async updateMemberSignature(id: string, signatureImageUrl: string) {
+    const m = await this.findMember(id);
+    if (m.signatureImageUrl) {
+      await this.storage.delete(m.signatureImageUrl).catch(() => null);
+    }
+    m.signatureImageUrl = signatureImageUrl;
     return this.memberRepo.save(m);
   }
 
