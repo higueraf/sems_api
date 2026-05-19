@@ -290,6 +290,14 @@ async function fetchPhotoBuffer(url: string): Promise<Buffer | null> {
   } catch { return null; }
 }
 
+function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function flagToCode(emoji: string): string {
   if (!emoji) return '';
   try {
@@ -433,10 +441,9 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
         const auth = slot.submission?.authors?.find((a: any) => a.isCorresponding)
           ?? slot.submission?.authors?.[0];
         const speaker   = slot.speakerName || (auth as any)?.fullName || '';
-        const affil     = slot.speakerAffiliation || (auth as any)?.affiliation || '';
-        // Normalize title: strip newlines/extra spaces that inflate row height
-        const title     = (slot.submission?.titleEs || slot.title || '')
-                            .replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        const affil     = stripHtml(slot.speakerAffiliation || (auth as any)?.affiliation || '');
+        // Strip HTML tags and normalize whitespace to prevent inflated row heights
+        const title     = stripHtml(slot.submission?.titleEs || slot.title || '');
         const axis      = slot.thematicAxis || (slot.submission as any)?.thematicAxis;
         const photoUrl  = (auth as any)?.photoUrl as string | undefined;
         const photoBuf  = photoUrl ? photoCache.get(photoUrl) : undefined;
@@ -448,7 +455,7 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
 
         doc.font('Helvetica-Bold').fontSize(9);
         const titleH = title ? doc.heightOfString(title, { width: CON_W - 4 }) : 0;
-        let rowH = 10 + titleH + (speaker ? 12 : 0) + (affil ? 11 : 0) + (axis ? 14 : 0) + 8;
+        let rowH = 10 + titleH + (speaker ? 15 : 0) + (affil ? 11 : 0) + (axis ? 14 : 0) + 8;
         rowH = Math.max(rowH, PH_R * 2 + 12); // ensure photo fits
 
         chkBreak(rowH + 2);
@@ -496,9 +503,9 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
               doc.widthOfString(speaker, { lineBreak: false } as any),
               CON_W - 26,
             );
-            try { doc.image(flagBuf, CON_X + nameW + 5, iy + 0.5, { height: 11 }); } catch { /* */ }
+            try { doc.image(flagBuf, CON_X + nameW + 5, iy + 1, { height: 10 }); } catch { /* */ }
           }
-          iy += 12;
+          iy += 15; // extra room so flag doesn't overlap next line
         }
         if (affil) {
           doc.fillColor('#888888').font('Helvetica').fontSize(7.5)
