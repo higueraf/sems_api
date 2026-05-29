@@ -77,6 +77,7 @@ export class SubmissionsService implements OnModuleInit {
     @InjectRepository(SubmissionStatusHistory)  private historyRepo: Repository<SubmissionStatusHistory>,
     @InjectRepository(SubmissionFile)           private fileRepo: Repository<SubmissionFile>,
     @InjectRepository(ScientificProductType)    private productTypeRepo: Repository<ScientificProductType>,
+    @InjectRepository(User)                     private userRepo: Repository<User>,
     private mailService: MailService,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
@@ -649,7 +650,26 @@ export class SubmissionsService implements OnModuleInit {
   async assignEvaluator(id: string, dto: AssignEvaluatorDto) {
     const submission = await this.findOne(id);
     submission.assignedEvaluatorId = dto.evaluatorId;
-    return this.repo.save(submission);
+    await this.repo.save(submission);
+
+    if (dto.evaluatorId) {
+      setTimeout(async () => {
+        try {
+          const evaluator = await this.userRepo.findOne({ where: { id: dto.evaluatorId } });
+          if (evaluator) {
+            await this.mailService.sendEvaluatorAssigned(
+              submission,
+              `${evaluator.firstName} ${evaluator.lastName}`,
+              evaluator.email,
+            );
+          }
+        } catch (err) {
+          this.logger.error(`Error correo evaluador [${id}]: ${err.message}`);
+        }
+      });
+    }
+
+    return this.findOne(id);
   }
 
   /** Cambia el estatus de un tipo de producto científico específico dentro de la postulación */

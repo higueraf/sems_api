@@ -600,7 +600,8 @@ export class CertificatesService {
       this.getSignatories(submission.eventId),
     ]);
 
-    const appUrl = this.config.get<string>('frontendUrl') || 'http://localhost:5173';
+    const appUrl = (this.config.get<string>('frontendUrl') || 'http://localhost:5173')
+      .split(',').map(u => u.trim()).find(u => u.startsWith('https://')) ?? 'http://localhost:5173';
     const created: Certificate[] = [];
 
     // Si hay un único autor → siempre se le genera el certificado.
@@ -753,7 +754,8 @@ export class CertificatesService {
       }
 
       const author      = cert.author;
-      const appUrl      = this.config.get<string>('frontendUrl') || 'http://localhost:5173';
+      const appUrl      = (this.config.get<string>('frontendUrl') || 'http://localhost:5173')
+        .split(',').map(u => u.trim()).find(u => u.startsWith('https://')) ?? 'http://localhost:5173';
       const verifyUrl   = `${appUrl}/certificado/${cert.verificationCode}`;
 
       const html = this.buildCertificateEmailHtml(
@@ -892,6 +894,44 @@ export class CertificatesService {
     if (filters.sent === 'false') qb.andWhere('c.emailSentAt IS NULL');
 
     return qb.getMany();
+  }
+
+  // ── Búsqueda pública de certificados (por email o número) ────────────────────
+
+  async searchPublic(query: string) {
+    const isCertNumber = /^CERT-\d{4}-\d+$/i.test(query.trim());
+
+    const qb = this.certRepo
+      .createQueryBuilder('c')
+      .leftJoinAndSelect('c.author', 'author')
+      .leftJoinAndSelect('c.submission', 'submission');
+
+    if (isCertNumber) {
+      qb.where('UPPER(c.certificateNumber) = :num', { num: query.trim().toUpperCase() });
+    } else {
+      qb.where('LOWER(author.email) = LOWER(:email)', { email: query.trim() });
+    }
+
+    const certs = await qb.orderBy('c.issuedAt', 'DESC').getMany();
+
+    return certs.map(c => ({
+      id:                c.id,
+      certificateNumber: c.certificateNumber,
+      verificationCode:  c.verificationCode,
+      authorName:        c.author?.fullName ?? '',
+      titleEs:           c.submission?.titleEs ?? '',
+      productTypeName:   c.productTypeName,
+      issuedAt:          c.issuedAt,
+      emailSentAt:       c.emailSentAt ?? null,
+    }));
+  }
+
+  async getPublicDownloadUrl(code: string): Promise<{ url: string; fileName: string }> {
+    const cert = await this.certRepo.findOne({ where: { verificationCode: code } });
+    if (!cert) throw new NotFoundException('Certificado no encontrado');
+    if (!cert.fileUrl) throw new BadRequestException('El certificado aún no tiene archivo generado');
+    const url = await this.storage.getSignedUrl(cert.fileUrl, 600);
+    return { url: url ?? cert.fileUrl, fileName: cert.fileName ?? `${cert.certificateNumber}.pdf` };
   }
 
   // ── Verificación pública ─────────────────────────────────────────────────────

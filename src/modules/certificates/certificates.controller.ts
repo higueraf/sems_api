@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, Query, UseGuards,
+  Controller, Get, Post, Delete, Param, Body, Query, UseGuards, BadRequestException,
 } from '@nestjs/common';
 import { CertificatesService } from './certificates.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -18,12 +18,25 @@ import {
 export class CertificatesController {
   constructor(private readonly service: CertificatesService) {}
 
-  // ── Público: verificar certificado ─────────────────────────────────────────
+  // ── Público ─────────────────────────────────────────────────────────────────
 
   @Public()
   @Get('verify/:code')
   verify(@Param('code') code: string) {
     return this.service.verify(code);
+  }
+
+  @Public()
+  @Get('public/search')
+  searchPublic(@Query('q') q: string) {
+    if (!q?.trim()) throw new BadRequestException('Parámetro q requerido');
+    return this.service.searchPublic(q);
+  }
+
+  @Public()
+  @Get('public/download/:code')
+  getPublicDownload(@Param('code') code: string) {
+    return this.service.getPublicDownloadUrl(code);
   }
 
   // ── Admin/Evaluador ────────────────────────────────────────────────────────

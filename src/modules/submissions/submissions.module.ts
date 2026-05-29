@@ -7,6 +7,7 @@ import { SubmissionStatusHistory } from '../../entities/submission-status-histor
 import { SubmissionAuthor } from '../../entities/submission-author.entity';
 import { SubmissionFile } from '../../entities/submission-file.entity';
 import { ScientificProductType } from '../../entities/scientific-product-type.entity';
+import { User } from '../../entities/user.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
@@ -15,6 +16,7 @@ import { ScientificProductType } from '../../entities/scientific-product-type.en
     SubmissionAuthor,
     SubmissionFile,
     ScientificProductType,
+    User,
   ])],
   controllers: [SubmissionsController],
   providers: [SubmissionsService],

@@ -427,6 +427,47 @@ export class MailService implements OnModuleInit {
     return this.send(toEmail, toName, subject, html, EmailType.CERTIFICATE, submissionId, sentById, attachments);
   }
 
+  async sendEvaluatorAssigned(
+    submission: Submission,
+    evaluatorName: string,
+    evaluatorEmail: string,
+  ) {
+    const author = submission.authors?.find((a) => a.isCorresponding) ?? submission.authors?.[0];
+    if (!author) return;
+
+    const content = `
+      <div style="font-size:18px;font-weight:bold;color:#003918;margin-bottom:20px;">Estimado/a ${author.fullName},</div>
+      <p style="color:#333333;margin-bottom:16px;">
+        Le informamos que se ha asignado un <strong>evaluador/revisor</strong> a su postulación en el
+        <strong>II Simposio Internacional de Ciencia Abierta 2026</strong>.
+      </p>
+      <div style="background-color:#f0f9f4;border-left:4px solid #007F3A;padding:20px;margin:20px 0;border-radius:0 4px 4px 0;">
+        <div style="font-size:14px;font-weight:bold;color:#007F3A;text-transform:uppercase;margin-bottom:15px;">Datos de su evaluador</div>
+        <div class="info-row"><span style="font-weight:bold;color:#005c2a;display:inline-block;min-width:140px;">Nombre</span><span style="color:#374840;">${evaluatorName}</span></div>
+        <div class="info-row"><span style="font-weight:bold;color:#005c2a;display:inline-block;min-width:140px;">Correo</span><span style="color:#374840;"><a href="mailto:${evaluatorEmail}" style="color:#007F3A;">${evaluatorEmail}</a></span></div>
+        <div class="info-row"><span style="font-weight:bold;color:#005c2a;display:inline-block;min-width:140px;">Código</span><span style="color:#374840;">${submission.referenceCode}</span></div>
+        <div style="padding:8px 0;"><span style="font-weight:bold;color:#005c2a;display:inline-block;min-width:140px;">Título</span><span style="color:#374840;">${submission.titleEs || 'No especificado'}</span></div>
+      </div>
+      <div style="background-color:#fffbeb;border-left:4px solid #f59e0b;padding:15px 20px;margin:20px 0;border-radius:0 4px 4px 0;">
+        <p style="color:#333333;margin:0;">
+          Toda comunicación relacionada con su postulación (dudas, estado de evaluación, correcciones)
+          debe realizarse directamente al correo del evaluador indicado arriba.
+        </p>
+      </div>
+      <div style="margin-top:30px;padding-top:20px;border-top:1px solid #e0e0e0;">
+        <p style="margin:5px 0;color:#666;">Con los mejores deseos académicos,</p>
+        <p style="margin:5px 0;"><strong style="color:#003918;">Comité Organizador</strong></p>
+        <p style="margin:5px 0;color:#007F3A;">II Simposio Internacional de Ciencia Abierta 2026</p>
+      </div>
+    `;
+
+    return this.send(
+      author.email, author.fullName,
+      `[SEMS] Evaluador asignado a su postulación — ${submission.referenceCode}`,
+      this.buildBaseLayout(content), EmailType.SUBMISSION_RECEIVED, submission.id,
+    );
+  }
+
   async findLogs(submissionId?: string) {
     const where = submissionId ? { relatedSubmissionId: submissionId } : {};
     return this.emailLogRepo.find({ where, order: { createdAt: 'DESC' }, take: 100 });

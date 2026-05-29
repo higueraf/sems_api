@@ -97,49 +97,49 @@ export class AgendaController {
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Post()
   create(@Body() dto: CreateAgendaSlotDto) {
     return this.agendaService.create(dto);
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Patch('reorder')
   reorder(@Body() dto: ReorderSlotsDto) {
     return this.agendaService.reorder(dto);
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Patch('publish-all')
   publishAll(@Query('eventId') eventId: string) {
     return this.agendaService.publishAll(eventId);
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateAgendaSlotDto) {
     return this.agendaService.update(id, dto);
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Patch(':id/publish')
   publish(@Param('id') id: string) {
     return this.agendaService.togglePublish(id, true);
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Patch(':id/unpublish')
   unpublish(@Param('id') id: string) {
     return this.agendaService.togglePublish(id, false);
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Delete(':id')
   remove(
     @Param('id') id: string,
