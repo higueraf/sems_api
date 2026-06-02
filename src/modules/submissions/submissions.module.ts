@@ -8,6 +8,7 @@ import { SubmissionAuthor } from '../../entities/submission-author.entity';
 import { SubmissionFile } from '../../entities/submission-file.entity';
 import { ScientificProductType } from '../../entities/scientific-product-type.entity';
 import { User } from '../../entities/user.entity';
+import { Certificate } from '../../entities/certificate.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
@@ -17,6 +18,7 @@ import { User } from '../../entities/user.entity';
     SubmissionFile,
     ScientificProductType,
     User,
+    Certificate,
   ])],
   controllers: [SubmissionsController],
   providers: [SubmissionsService],

@@ -9,6 +9,7 @@ import { SubmissionStatusHistory } from '../../entities/submission-status-histor
 import { SubmissionFile, SubmissionFileType } from '../../entities/submission-file.entity';
 import { ScientificProductType } from '../../entities/scientific-product-type.entity';
 import { User } from '../../entities/user.entity';
+import { Certificate } from '../../entities/certificate.entity';
 import {
   CreateSubmissionDto, UpdateSubmissionStatusDto,
   SendCustomEmailDto, AssignEvaluatorDto, BulkEmailDto,
@@ -36,12 +37,12 @@ const PRODUCT_TYPE_STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus
   [SubmissionStatus.RECEIVED]:           [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.WITHDRAWN],
   [SubmissionStatus.UNDER_REVIEW]:       [SubmissionStatus.APPROVED, SubmissionStatus.REJECTED, SubmissionStatus.REVISION_REQUESTED, SubmissionStatus.WITHDRAWN],
   [SubmissionStatus.REVISION_REQUESTED]: [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.REJECTED, SubmissionStatus.WITHDRAWN],
-  [SubmissionStatus.APPROVED]:           [SubmissionStatus.SCHEDULED, SubmissionStatus.REJECTED],
+  [SubmissionStatus.APPROVED]:           [SubmissionStatus.SCHEDULED, SubmissionStatus.REJECTED, SubmissionStatus.EXECUTED, SubmissionStatus.UNDER_REVIEW],
   [SubmissionStatus.REJECTED]:           [SubmissionStatus.UNDER_REVIEW],
   [SubmissionStatus.WITHDRAWN]:          [],
   [SubmissionStatus.SCHEDULED]:          [SubmissionStatus.APPROVED, SubmissionStatus.EXECUTED],
-  [SubmissionStatus.EXECUTED]:           [SubmissionStatus.CERTIFICATE_SENT, SubmissionStatus.SCHEDULED],
-  [SubmissionStatus.CERTIFICATE_SENT]:   [SubmissionStatus.EXECUTED],
+  [SubmissionStatus.EXECUTED]:           [SubmissionStatus.CERTIFICATE_SENT, SubmissionStatus.SCHEDULED, SubmissionStatus.APPROVED],
+  [SubmissionStatus.CERTIFICATE_SENT]:   [SubmissionStatus.EXECUTED, SubmissionStatus.APPROVED, SubmissionStatus.SCHEDULED, SubmissionStatus.UNDER_REVIEW],
 };
 
 const ALLOWED_WORD_MIME = [
@@ -78,6 +79,7 @@ export class SubmissionsService implements OnModuleInit {
     @InjectRepository(SubmissionFile)           private fileRepo: Repository<SubmissionFile>,
     @InjectRepository(ScientificProductType)    private productTypeRepo: Repository<ScientificProductType>,
     @InjectRepository(User)                     private userRepo: Repository<User>,
+    @InjectRepository(Certificate)              private certRepo: Repository<Certificate>,
     private mailService: MailService,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
@@ -712,6 +714,21 @@ export class SubmissionsService implements OnModuleInit {
     };
     if (dto.isbnCode?.trim()) updatePayload.isbnCode = dto.isbnCode.trim();
     await this.repo.update(id, updatePayload);
+
+    // Para capítulos de libro: eliminar certificados al salir de 'approved', 'executed' o 'certificate_sent'
+    // (permite regenerarlos si se vuelve a aprobar / ejecutar)
+    const leavingCertStatus =
+      currentStatus === SubmissionStatus.APPROVED ||
+      currentStatus === SubmissionStatus.EXECUTED ||
+      currentStatus === SubmissionStatus.CERTIFICATE_SENT;
+    if (leavingCertStatus) {
+      const pt = await this.productTypeRepo.findOne({ where: { id: productTypeId } });
+      const ptLower = (pt?.name ?? '').toLowerCase();
+      const isBookChapter = ptLower.includes('cap') && ptLower.includes('libro');
+      if (isBookChapter) {
+        await this.certRepo.delete({ submissionId: id, productTypeId });
+      }
+    }
 
     // Notificar al postulante si se solicita
     if (dto.notifyApplicant) {

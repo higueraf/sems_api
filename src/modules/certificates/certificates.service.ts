@@ -167,10 +167,11 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
     doc.rect(CX + CW / 2 - 40, afterAuthorY, 80, 2).fillColor(G3).fill();
     doc.circle(CX + CW / 2, afterAuthorY + 1, 4.5).fillColor(G3).fill();
 
-    // Rol: “PONENTE” para ponencias/comunicaciones orales; “AUTOR/A PRINCIPAL”/”CO-AUTOR/A” para el resto
+    // Rol y textos descriptivos según tipo de producción
     const ptLower = (opts.productTypeName || '').toLowerCase();
-    const isPonencia = ptLower.includes('ponencia') || ptLower.includes('comunicaci');
-    const rolLabel = isPonencia ? 'PONENTE' : (opts.isMainAuthor ? 'AUTOR/A PRINCIPAL' : 'CO-AUTOR/A');
+    const isPonencia    = ptLower.includes('ponencia') || ptLower.includes('comunicaci');
+    const isBookChapter = ptLower.includes('cap') && ptLower.includes('libro');
+    const rolLabel = isPonencia ? 'PONENTE' : 'AUTOR/A';
 
     const rolY = afterAuthorY + 15;
     doc.font('Helvetica').fontSize(12).fillColor('#555555')
@@ -180,18 +181,28 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
     doc.font('Helvetica-Bold').fontSize(20).fillColor(G3)
       .text(rolLabel, CX, labelY, { width: CW, align: 'center' });
 
-    // “por su participación con la producción científica titulada:”
+    // Texto descriptivo
+    const descText = isBookChapter
+      ? 'por la publicación del capítulo de libro titulado:'
+      : 'por su participación con la producción científica titulada:';
     const descY = labelY + 28;
     doc.font('Helvetica').fontSize(12).fillColor('#555555')
-      .text('por su participación con la producción científica titulada:', CX, descY, { width: CW, align: 'center' });
+      .text(descText, CX, descY, { width: CW, align: 'center' });
 
-    // Título de la ponencia
+    // Título
     const titleY = descY + 25;
     const shortTitle = opts.titleEs.length > 150 ? opts.titleEs.substring(0, 150) + '…' : opts.titleEs;
     doc.font('Helvetica-BoldOblique').fontSize(15).fillColor(G3)
       .text(`”${shortTitle}”`, CX + 20, titleY, { width: CW - 40, align: 'center' });
 
-    // Eje Temático (solo eje, sin tipo de producción)
+    // ISBN — solo para capítulo de libro
+    if (isBookChapter && opts.isbnCode) {
+      const isbnY = doc.y + 10;
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000')
+        .text(`ISBN: ${opts.isbnCode}`, CX, isbnY, { width: CW, align: 'center' });
+    }
+
+    // Eje Temático
     if (opts.thematicAxisName) {
       const detY = doc.y + 12;
       doc.font('Helvetica').fontSize(11).fillColor('#777777')
@@ -286,7 +297,7 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLANTILLA 2: CARTA — Portrait A4 estilo carta institucional UMAYOR
+// PLANTILLA 2: CERTIFICADO DE ACEPTACIÓN — Portrait A4 Capítulo de Libro
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function buildCartaPdf(opts: PdfOpts): Promise<Buffer> {
@@ -297,120 +308,165 @@ async function buildCartaPdf(opts: PdfOpts): Promise<Buffer> {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    const W = doc.page.width;
-    const H = doc.page.height;
+    const W = doc.page.width;   // ~595
+    const H = doc.page.height;  // ~841
 
-    // ── Paleta y Estilos ────────────────────────────────────────────────────
     const BLACK = '#000000';
     const TXT   = '#2b2b2b';
     const WHITE = '#ffffff';
+    const G1    = '#134e2c';
+    const G2    = '#1b5e3b';
+    const G3    = '#2e8b57';
+    const G4    = '#52b788';
+    const G5    = '#d8f3dc';
+    const M     = 60; // margen lateral
 
-    // Fondo blanco
+    // ── Fondo blanco ─────────────────────────────────────────────────────────
     doc.rect(0, 0, W, H).fillColor(WHITE).fill();
 
+    // ── Ondas curvas verdes en el HEADER (espejo del footer) ─────────────────
+    const drawTopWave = (color: string, leftY: number, rightY: number, cpOffset: number) => {
+      doc.fillColor(color)
+        .moveTo(0, 0).lineTo(W, 0)
+        .lineTo(W, rightY)
+        .bezierCurveTo(W * 0.65, rightY + cpOffset, W * 0.35, leftY + cpOffset, 0, leftY)
+        .closePath().fill();
+    };
+    drawTopWave(G5, 42, 28, 12);
+    drawTopWave(G4, 32, 20,  9);
+    drawTopWave(G3, 24, 14,  7);
+    drawTopWave(G2, 15,  9,  5);
+    drawTopWave(G1,  7,  3,  2);
 
-    // ── Logo Superior (umayor) ──────────────────────────────────────────────
+    // ── Logo centrado bajo el header ─────────────────────────────────────────
+    const LOGO_SIZE = 90;
+    const LOGO_Y    = 44;
     if (opts.headerLogoBuffer) {
-      try { doc.image(opts.headerLogoBuffer, 45, 30, { fit: [90, 90] }); }
-      catch { /* omitir */ }
+      try {
+        doc.image(opts.headerLogoBuffer, (W - LOGO_SIZE) / 2, LOGO_Y, { fit: [LOGO_SIZE, LOGO_SIZE] });
+      } catch { /* omitir */ }
     }
 
-    // ── Título Principal ────────────────────────────────────────────────────
-    const titleTopY = 160;
-    doc.font('Helvetica-Bold').fontSize(26).fillColor(BLACK)
-      .text('CERTIFICADO DE', 60, titleTopY)
-      .text('PUBLICACIÓN ', 60, titleTopY + 32, { continued: true })
-      .text('CAPÍTULO DE', { continued: false })
-      .text('LIBRO', 60, titleTopY + 64);
+    // ── Institución ──────────────────────────────────────────────────────────
+    const instY = LOGO_Y + LOGO_SIZE + 7;
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor(G1)
+      .text('EL SELLO EDITORIAL DE LA INSTITUCIÓN UNIVERSITARIA MAYOR DE CARTAGENA – UMAYOR',
+        M, instY, { width: W - M * 2, align: 'center', characterSpacing: 0.2 });
 
-    // Línea negra bajo el título
-    const sepY = titleTopY + 105;
-    doc.rect(60, sepY, W - 120, 2).fillColor(BLACK).fill();
+    // ── Separador 1 ──────────────────────────────────────────────────────────
+    const sep1Y = instY + 18;
+    doc.rect(M, sep1Y, W - M * 2, 1.2).fillColor(G1).fill();
 
-    // ── Contenido de la carta ───────────────────────────────────────────────
-    const contentY = sepY + 30;
-    
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(BLACK)
-      .text('SE HACE CONSTAR QUE:', 60, contentY);
+    // ── Título ───────────────────────────────────────────────────────────────
+    const titleY = sep1Y + 10;
+    doc.font('Helvetica-Bold').fontSize(20).fillColor(BLACK)
+      .text('CERTIFICADO DE ACEPTACIÓN', M, titleY, { width: W - M * 2, align: 'center' });
 
-    const textY = contentY + 20;
+    const subtitleY = titleY + 26;
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(G2)
+      .text('CAPÍTULO DE LIBRO', M, subtitleY, { width: W - M * 2, align: 'center' });
+
+    // ── Separador 2 ──────────────────────────────────────────────────────────
+    const sep2Y = subtitleY + 20;
+    doc.rect(M, sep2Y, W - M * 2, 1.2).fillColor(G1).fill();
+
+    // ── HACE CONSTAR QUE: ─────────────────────────────────────────────────────
+    const hcqY = sep2Y + 16;
+    doc.font('Helvetica-Bold').fontSize(10.5).fillColor(BLACK)
+      .text('HACE CONSTAR QUE:', M, hcqY, { width: W - M * 2 });
+
+    // ── Cuerpo del certificado ────────────────────────────────────────────────
+    const textStartY = hcqY + 18;
+    const CW         = W - M * 2;
     const authorsStr = opts.allAuthors || opts.authorName;
-    const titleUpper = opts.titleEs.toUpperCase();
 
     // Párrafo 1
     doc.font('Helvetica').fontSize(10).fillColor(TXT)
-      .text('El capítulo titulado ', 60, textY, { continued: true, width: W - 120, align: 'justify', lineGap: 3 })
-      .font('Helvetica-Bold')
-      .text(`“${titleUpper}”`, { continued: true })
-      .font('Helvetica')
-      .text(', elaborado por ', { continued: true })
-      .font('Helvetica-Bold')
+      .text('El capítulo de libro titulado ', M, textStartY, {
+        continued: true, width: CW, align: 'justify', lineGap: 2,
+      })
+      .font('Helvetica-Bold').fillColor(BLACK)
+      .text(`”${opts.titleEs}”`, { continued: true })
+      .font('Helvetica').fillColor(TXT)
+      .text(', elaborado por los autores ', { continued: true })
+      .font('Helvetica-Bold').fillColor(BLACK)
       .text(authorsStr.toUpperCase(), { continued: true })
-      .font('Helvetica')
-      .text(', es un resultado de investigación original, el cual ha sido ', { continued: true })
-      .font('Helvetica-Bold')
-      .text('APROBADO PARA PUBLICACIÓN ', { continued: true })
-      .font('Helvetica')
-      .text('tras haber superado un proceso de evaluación académica por pares bajo la modalidad de doble ciego.');
+      .font('Helvetica').fillColor(TXT)
+      .text(', ha sido formalmente ', { continued: true })
+      .font('Helvetica-Bold').fillColor(G1)
+      .text('ACEPTADO Y APROBADO PARA PUBLICACIÓN', { continued: true })
+      .font('Helvetica').fillColor(TXT)
+      .text(' tras haber superado de manera satisfactoria el proceso de evaluación académica por pares bajo la modalidad de doble ciego.');
 
-    doc.moveDown(1.5);
+    doc.moveDown(0.9);
 
     // Párrafo 2
-    const isbnStr = opts.isbnCode ? `ISBN ${opts.isbnCode}` : 'ISBN 978-628-97432-7-2 (impreso) y 978-628-97432-9-6 (digital)';
-    doc.font('Helvetica')
-      .text('Este capítulo forma parte del libro de investigación ', { continued: true, width: W - 120, align: 'justify', lineGap: 3 })
-      .font('Helvetica-Bold')
-      .text('”INNOVACIÓN EN ACCIÓN: SOLUCIONES TECNOLÓGICAS QUE TRANSFORMAN SALUD, INDUSTRIA Y SOCIEDAD”', { continued: true })
-      .font('Helvetica')
-      .text(`, con ${isbnStr}, el cual será publicado por el Sello Editorial de la Institución Universitaria Mayor de Cartagena (UMAYOR), conforme a sus políticas de calidad editorial, procesos de gestión científica y lineamientos para la producción de nuevo conocimiento.`);
+    doc.font('Helvetica').fontSize(10).fillColor(TXT)
+      .text('Este manuscrito científico es un resultado de investigación original y será editado y publicado bajo el Sello Editorial de la Institución Universitaria Mayor de Cartagena – UMAYOR.',
+        { width: CW, align: 'justify', lineGap: 2 });
 
-    doc.moveDown(1.5);
+    doc.moveDown(0.9);
 
     // Párrafo 3
-    doc.font('Helvetica')
-      .text(`El manuscrito fue evaluado bajo criterios de rigurosidad científica y solidez metodológica, cumpliendo con los estándares para publicaciones de nuevo conocimiento. Este capítulo se integra a la obra bajo el ${isbnStr}.`, { width: W - 120, align: 'justify', lineGap: 3 });
-
-    doc.moveDown(1.5);
-
-    // Párrafo 4 (Fecha expedición)
-    const d = opts.createdAt || new Date();
-    const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-    const dateStr = `${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
-    
-    doc.font('Helvetica')
-      .text(`Expedido en Colombia, Cartagena de Indias, el ${dateStr}.`, { width: W - 120, align: 'left' });
-
-    // ── Firma ───────────────────────────────────────────────────────────────
-    const sigY = doc.y + 40;
-    
-    // Dibujar trazo de firma simbólico (estilo genérico como en la imagen)
-    doc.lineWidth(1.5).strokeColor(BLACK);
-    doc.moveTo(60, sigY + 25).bezierCurveTo(90, sigY - 10, 110, sigY + 40, 150, sigY + 10).stroke();
-    doc.moveTo(150, sigY + 10).bezierCurveTo(170, sigY - 5, 180, sigY + 20, 200, sigY + 5).stroke();
-    
-    // Línea para la firma
-    doc.lineWidth(1).strokeColor(BLACK);
-    doc.moveTo(60, sigY + 30).lineTo(220, sigY + 30).stroke();
-
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(BLACK)
-      .text('FERNANDO PARRA LÓPEZ', 60, sigY + 35);
     doc.font('Helvetica').fontSize(10).fillColor(TXT)
-      .text('Líder del Sello Editorial / Editor Académico\nSello Editorial UMAYOR\nInstitución Universitaria Mayor de Cartagena – UMAYOR', 60, sigY + 48, { lineGap: 2 });
+      .text('La evaluación del documento se rigió bajo estrictos criterios de rigurosidad científica, originalidad, solidez metodológica y aporte al campo del conocimiento, en total cumplimiento con las políticas de calidad editorial y los lineamientos exigidos para la producción de nuevo conocimiento.',
+        { width: CW, align: 'justify', lineGap: 2 });
 
-    // ── Footer ──────────────────────────────────────────────────────────────
-    const footerY = H - 85;
-    doc.font('Helvetica-Bold').fontSize(10).fillColor('#1b5e3b')
+    doc.moveDown(0.9);
+
+    // Párrafo 4 — Fecha
+    const d      = opts.createdAt || new Date();
+    const months = ['enero','febrero','marzo','abril','mayo','junio',
+                    'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    doc.font('Helvetica').fontSize(10).fillColor(TXT)
+      .text(`Se expide la presente constancia a solicitud de los interesados, en la ciudad de Cartagena de Indias, D. T. y C., Colombia, a los ${d.getDate()} días del mes de ${months[d.getMonth()]} de ${d.getFullYear()}.`,
+        { width: CW, align: 'left', lineGap: 2 });
+
+    // ── Firmas (mismas que en certificado de ponencia) ────────────────────────
+    const activeSigs = (opts.signatories ?? []).filter(s => s.name).slice(0, 2);
+    if (activeSigs.length > 0) {
+      const sigBaseY  = doc.y + 35;
+      const colCount  = activeSigs.length;
+      const colW      = Math.floor(CW / colCount) - 15;
+      const MAX_SIG_H = 70;
+
+      for (let i = 0; i < activeSigs.length; i++) {
+        const sig  = activeSigs[i];
+        const colX = M + i * (colW + 30);
+
+        if (sig.signatureBuffer) {
+          try {
+            const sigImg = (doc as any).openImage(sig.signatureBuffer);
+            const scale  = Math.min(140 / sigImg.width, MAX_SIG_H / sigImg.height, 1);
+            const rw     = sigImg.width  * scale;
+            const rh     = sigImg.height * scale;
+            const imgX   = colX + (colW - rw) / 2;
+            doc.image(sig.signatureBuffer, imgX, sigBaseY + (MAX_SIG_H - rh), { width: rw, height: rh });
+          } catch { /* omitir */ }
+        }
+
+        const lineY = sigBaseY + MAX_SIG_H + 3;
+        doc.moveTo(colX, lineY).lineTo(colX + colW, lineY)
+          .lineWidth(0.8).strokeColor(G1).stroke();
+
+        doc.font('Helvetica-Bold').fontSize(9).fillColor(BLACK)
+          .text(sig.name, colX, lineY + 5, { width: colW, align: 'center' });
+        if (sig.title) {
+          doc.font('Helvetica').fontSize(8).fillColor('#444444')
+            .text(sig.title, colX, lineY + 17, { width: colW, align: 'center' });
+        }
+      }
+    }
+
+    // ── Footer ────────────────────────────────────────────────────────────────
+    const footerY = H - 68;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(G2)
       .text('www.umayor.edu.co', 0, footerY, { align: 'center', width: W });
-    doc.font('Helvetica').fontSize(9).fillColor('#666666')
-      .text('Cartagena de Indias - Centro Histórico - K3 # 36-95 Calle de la Factoría', 0, footerY + 15, { align: 'center', width: W });
+    doc.font('Helvetica').fontSize(8).fillColor('#666666')
+      .text('Cartagena de Indias - Centro Histórico - K3 # 36-95 Calle de la Factoría',
+        0, footerY + 13, { align: 'center', width: W });
 
-    // ── Rayas curvas verdes en la parte inferior (estilo diploma) ────────────────
-    const Gw1 = '#134e2c';
-    const Gw2 = '#1b5e3b';
-    const Gw3 = '#2e8b57';
-    const Gw4 = '#52b788';
-    const Gw5 = '#d8f3dc';
-
+    // ── Ondas curvas verdes en el FOOTER ──────────────────────────────────────
     const drawBottomWave = (color: string, leftY: number, rightY: number, cpOffset: number) => {
       doc.fillColor(color)
         .moveTo(0, H).lineTo(W, H)
@@ -418,13 +474,12 @@ async function buildCartaPdf(opts: PdfOpts): Promise<Buffer> {
         .bezierCurveTo(W * 0.65, rightY - cpOffset, W * 0.35, leftY - cpOffset, 0, leftY)
         .closePath().fill();
     };
+    drawBottomWave(G5, H - 40, H - 25, 12);
+    drawBottomWave(G4, H - 30, H - 18,  9);
+    drawBottomWave(G3, H - 22, H - 13,  7);
+    drawBottomWave(G2, H - 14, H -  8,  5);
+    drawBottomWave(G1, H -  6, H -  3,  2);
 
-    drawBottomWave(Gw5, H - 40, H - 25, 12);
-    drawBottomWave(Gw4, H - 30, H - 18,  9);
-    drawBottomWave(Gw3, H - 22, H - 13,  7);
-    drawBottomWave(Gw2, H - 14, H -  8,  5);
-    drawBottomWave(Gw1, H -  6, H -  3,  2);
-    
     doc.end();
   });
 }
@@ -593,6 +648,24 @@ export class CertificatesService {
     }
 
     const productType = await this.productTypeRepo.findOne({ where: { id: productTypeId } });
+
+    // Guard: evitar doble envío del certificado de aceptación (capítulo de libro en estado aprobado)
+    const ptNameLowerGuard = (productType?.name ?? '').toLowerCase();
+    const isBookChapterApproval =
+      ptNameLowerGuard.includes('cap') && ptNameLowerGuard.includes('libro') &&
+      submission.productStatuses?.[productTypeId] === SubmissionStatus.APPROVED;
+    if (isBookChapterApproval) {
+      const alreadySent = await this.certRepo.findOne({
+        where: { submissionId, productTypeId },
+        select: ['id', 'emailSentAt'],
+      });
+      if (alreadySent?.emailSentAt) {
+        throw new BadRequestException(
+          'El certificado de aceptación ya fue enviado. Revierta el estado a revisión para poder generarlo nuevamente.',
+        );
+      }
+    }
+
     const event = submission.event ?? await this.eventRepo.findOne({ where: { id: submission.eventId } });
     const [organizerLogos, headerLogoBuffer, signatories] = await Promise.all([
       this.getOrganizerLogos(submission.eventId),
@@ -638,7 +711,10 @@ export class CertificatesService {
 
       const ptNameLower = (productType?.name ?? '').toLowerCase();
       const isBookChapter = ptNameLower.includes('cap') && ptNameLower.includes('libro');
-      const certStyle: 'diploma' | 'carta' = isBookChapter ? 'carta' : 'diploma';
+      // Capítulo del Libro: carta (portrait) cuando está Aprobado, diploma (landscape) cuando está Ejecutado
+      const currentPtStatus = submission.productStatuses?.[productTypeId];
+      const certStyle: 'diploma' | 'carta' =
+        isBookChapter && currentPtStatus === SubmissionStatus.APPROVED ? 'carta' : 'diploma';
 
       // Obtener todos los autores para la carta
       const allAuthorsStr = submission.authors.map(a => a.fullName).join(', ');
@@ -807,7 +883,10 @@ export class CertificatesService {
       const sent    = await this.certRepo.count({ where: { submissionId, productTypeId, emailSentAt: Not(IsNull()) } });
       if (total > 0 && sent === total) {
         const sub = await this.submissionRepo.findOne({ where: { id: submissionId } });
-        if (sub) {
+        // Solo transicionar a certificate_sent si el estado actual es executed
+        // (no al enviar el certificado de aprobación desde estado approved)
+        const currentPtStatus = sub?.productStatuses?.[productTypeId];
+        if (sub && currentPtStatus === SubmissionStatus.EXECUTED) {
           const updated = { ...(sub.productStatuses ?? {}), [productTypeId]: SubmissionStatus.CERTIFICATE_SENT };
           await this.submissionRepo.update(submissionId, {
             productStatuses: updated,
