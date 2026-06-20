@@ -85,6 +85,13 @@ export class CertificatesController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
+  @Post(':id/regenerate-and-send')
+  regenerateAndSendOne(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.service.regenerateAndSendOne(id, user);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);

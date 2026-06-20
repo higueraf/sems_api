@@ -787,6 +787,101 @@ export class CertificatesService {
     return created;
   }
 
+  // ── Regenerar y reenviar un único certificado ────────────────────────────────
+
+  async regenerateAndSendOne(certId: string, user: User): Promise<{ generated: number; sent: number; failed: number }> {
+    const cert = await this.certRepo.findOne({
+      where: { id: certId },
+      relations: ['author'],
+    });
+    if (!cert) throw new NotFoundException('Certificado no encontrado');
+
+    const submission = await this.submissionRepo.findOne({
+      where: { id: cert.submissionId },
+      relations: ['authors', 'thematicAxis', 'productType', 'event'],
+    });
+    if (!submission) throw new NotFoundException('Postulación no encontrada');
+
+    const author      = cert.author;
+    const productType = await this.productTypeRepo.findOne({ where: { id: cert.productTypeId } });
+    const event       = submission.event ?? await this.eventRepo.findOne({ where: { id: submission.eventId } });
+
+    const [organizerLogos, headerLogoBuffer, signatories] = await Promise.all([
+      this.getOrganizerLogos(submission.eventId),
+      this.getHeaderLogo(submission.eventId),
+      this.getSignatories(submission.eventId),
+    ]);
+
+    const appUrl = (this.config.get<string>('frontendUrl') || 'http://localhost:5173')
+      .split(',').map(u => u.trim()).find(u => u.startsWith('https://')) ?? 'http://localhost:5173';
+
+    const verificationUrl = `${appUrl}/certificado/${cert.verificationCode}`;
+    const isMainAuthor    = author.isCorresponding || author.authorOrder === 0;
+    const allAuthorsStr   = submission.authors.map(a => a.fullName).join(', ');
+    const eventDates      = this.formatEventDates(event);
+
+    const ptNameLower   = (productType?.name ?? '').toLowerCase();
+    const isBookChapter = ptNameLower.includes('cap') && ptNameLower.includes('libro');
+    const currentPtStatus = submission.productStatuses?.[cert.productTypeId];
+    const certStyle: 'diploma' | 'carta' =
+      isBookChapter && currentPtStatus === SubmissionStatus.APPROVED ? 'carta' : 'diploma';
+
+    let qrBuffer: Buffer | undefined;
+    try {
+      qrBuffer = await QRCode.toBuffer(verificationUrl, {
+        type: 'png', width: 200, margin: 1,
+        color: { dark: '#003918', light: '#ffffff' },
+      });
+    } catch { /* QR opcional */ }
+
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await buildCertificatePdf({
+        authorName:       author.fullName,
+        isMainAuthor,
+        titleEs:          submission.titleEs,
+        productTypeName:  productType?.name ?? 'Producción Científica',
+        thematicAxisName: submission.thematicAxis?.name ?? '',
+        eventName:        event?.name ?? 'II Simposio Internacional de Ciencia Abierta',
+        eventDates,
+        eventCity:        event?.city ?? event?.location ?? 'Cartagena de Indias, Colombia',
+        certificateNumber: cert.certificateNumber,
+        verificationUrl,
+        headerLogoBuffer,
+        signatories,
+        organizerLogoBuffers: organizerLogos,
+        qrBuffer,
+        allAuthors: allAuthorsStr,
+        isbnCode: submission.isbnCode ?? undefined,
+      }, certStyle);
+    } catch (err) {
+      throw new BadRequestException('Error al regenerar el PDF del certificado');
+    }
+
+    const sanitizedName  = author.fullName.replace(/\s+/g, '-');
+    const fileName       = `${cert.certificateNumber}-${sanitizedName}-diploma.pdf`;
+    let fileUrl          = cert.fileUrl;
+
+    try {
+      fileUrl = await this.storage.upload(
+        { buffer: pdfBuffer, originalname: fileName, mimetype: 'application/pdf', size: pdfBuffer.length } as any,
+        'guidelines',
+        `cert-${cert.verificationCode}-diploma`,
+      );
+    } catch (err) {
+      this.logger.error(`Error subiendo PDF regenerado: ${err.message}`);
+    }
+
+    cert.fileUrl     = fileUrl;
+    cert.fileName    = fileName;
+    cert.emailSentAt = null as any;
+    await this.certRepo.save(cert);
+    this.logger.log(`📜 Certificado ${cert.certificateNumber} REGENERADO para ${author.fullName}`);
+
+    const result = await this.sendCertificates([cert.id], user);
+    return { generated: 1, ...result };
+  }
+
   // ── Enviar certificados por correo ───────────────────────────────────────────
 
   async sendCertificates(certificateIds: string[], user: User): Promise<{ sent: number; failed: number }> {
