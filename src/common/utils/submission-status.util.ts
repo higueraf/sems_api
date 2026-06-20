@@ -17,6 +17,7 @@ const PROGRESSIVE_PRIORITY: Partial<Record<SubmissionStatus, number>> = {
 const TERMINAL: Set<string> = new Set([
   SubmissionStatus.REJECTED,
   SubmissionStatus.WITHDRAWN,
+  SubmissionStatus.CANCELLED,
 ]);
 
 /**

@@ -21,26 +21,28 @@ import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
 
 const STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
-  [SubmissionStatus.RECEIVED]:           [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.WITHDRAWN],
-  [SubmissionStatus.UNDER_REVIEW]:       [SubmissionStatus.APPROVED, SubmissionStatus.REJECTED, SubmissionStatus.REVISION_REQUESTED, SubmissionStatus.WITHDRAWN],
-  [SubmissionStatus.REVISION_REQUESTED]: [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.REJECTED, SubmissionStatus.WITHDRAWN],
-  [SubmissionStatus.APPROVED]:           [SubmissionStatus.SCHEDULED, SubmissionStatus.REJECTED],
+  [SubmissionStatus.RECEIVED]:           [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.WITHDRAWN, SubmissionStatus.CANCELLED],
+  [SubmissionStatus.UNDER_REVIEW]:       [SubmissionStatus.APPROVED, SubmissionStatus.REJECTED, SubmissionStatus.REVISION_REQUESTED, SubmissionStatus.WITHDRAWN, SubmissionStatus.CANCELLED],
+  [SubmissionStatus.REVISION_REQUESTED]: [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.REJECTED, SubmissionStatus.WITHDRAWN, SubmissionStatus.CANCELLED],
+  [SubmissionStatus.APPROVED]:           [SubmissionStatus.SCHEDULED, SubmissionStatus.REJECTED, SubmissionStatus.CANCELLED],
   [SubmissionStatus.REJECTED]:           [SubmissionStatus.UNDER_REVIEW],
   [SubmissionStatus.WITHDRAWN]:          [],
-  [SubmissionStatus.SCHEDULED]:          [SubmissionStatus.APPROVED, SubmissionStatus.EXECUTED],
+  [SubmissionStatus.CANCELLED]:          [],
+  [SubmissionStatus.SCHEDULED]:          [SubmissionStatus.APPROVED, SubmissionStatus.EXECUTED, SubmissionStatus.CANCELLED],
   [SubmissionStatus.EXECUTED]:           [SubmissionStatus.CERTIFICATE_SENT, SubmissionStatus.SCHEDULED],
   [SubmissionStatus.CERTIFICATE_SENT]:   [SubmissionStatus.EXECUTED],
 };
 
 /** Transiciones permitidas para el estatus por tipo de producto científico */
 const PRODUCT_TYPE_STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
-  [SubmissionStatus.RECEIVED]:           [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.WITHDRAWN],
-  [SubmissionStatus.UNDER_REVIEW]:       [SubmissionStatus.APPROVED, SubmissionStatus.REJECTED, SubmissionStatus.REVISION_REQUESTED, SubmissionStatus.WITHDRAWN],
-  [SubmissionStatus.REVISION_REQUESTED]: [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.REJECTED, SubmissionStatus.WITHDRAWN],
-  [SubmissionStatus.APPROVED]:           [SubmissionStatus.SCHEDULED, SubmissionStatus.REJECTED, SubmissionStatus.EXECUTED, SubmissionStatus.UNDER_REVIEW],
+  [SubmissionStatus.RECEIVED]:           [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.WITHDRAWN, SubmissionStatus.CANCELLED],
+  [SubmissionStatus.UNDER_REVIEW]:       [SubmissionStatus.APPROVED, SubmissionStatus.REJECTED, SubmissionStatus.REVISION_REQUESTED, SubmissionStatus.WITHDRAWN, SubmissionStatus.CANCELLED],
+  [SubmissionStatus.REVISION_REQUESTED]: [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.REJECTED, SubmissionStatus.WITHDRAWN, SubmissionStatus.CANCELLED],
+  [SubmissionStatus.APPROVED]:           [SubmissionStatus.SCHEDULED, SubmissionStatus.REJECTED, SubmissionStatus.EXECUTED, SubmissionStatus.UNDER_REVIEW, SubmissionStatus.CANCELLED],
   [SubmissionStatus.REJECTED]:           [SubmissionStatus.UNDER_REVIEW],
   [SubmissionStatus.WITHDRAWN]:          [],
-  [SubmissionStatus.SCHEDULED]:          [SubmissionStatus.APPROVED, SubmissionStatus.EXECUTED],
+  [SubmissionStatus.CANCELLED]:          [],
+  [SubmissionStatus.SCHEDULED]:          [SubmissionStatus.APPROVED, SubmissionStatus.EXECUTED, SubmissionStatus.CANCELLED],
   [SubmissionStatus.EXECUTED]:           [SubmissionStatus.CERTIFICATE_SENT, SubmissionStatus.SCHEDULED, SubmissionStatus.APPROVED],
   [SubmissionStatus.CERTIFICATE_SENT]:   [SubmissionStatus.EXECUTED, SubmissionStatus.APPROVED, SubmissionStatus.SCHEDULED, SubmissionStatus.UNDER_REVIEW],
 };

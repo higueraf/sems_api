@@ -3,8 +3,9 @@ export enum SubmissionStatus {
   UNDER_REVIEW = 'under_review',             // Assigned to evaluator
   REVISION_REQUESTED = 'revision_requested', // Author must revise
   APPROVED = 'approved',                     // Accepted for publication/presentation
-  REJECTED = 'rejected',                     // Not accepted
+  REJECTED = 'rejected',                     // Not accepted (terminal: no post-approval transitions)
   WITHDRAWN = 'withdrawn',                   // Author withdrew the submission
+  CANCELLED = 'cancelled',                   // Cancelled by admin (terminal)
   SCHEDULED = 'scheduled',                   // Assigned a slot in the agenda
   EXECUTED = 'executed',                     // Work was presented/executed at the event
   CERTIFICATE_SENT = 'certificate_sent',     // Certificate was generated and sent to authors
