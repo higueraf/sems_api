@@ -641,6 +641,9 @@ export class CertificatesService {
       relations: ['authors', 'thematicAxis', 'productType', 'event'],
     });
     if (!submission) throw new NotFoundException('Postulación no encontrada');
+    if (submission.authors?.length) {
+      submission.authors.sort((a, b) => a.authorOrder - b.authorOrder);
+    }
 
     const allIds = submission.productTypeIds ?? [submission.productTypeId];
     if (!allIds.includes(productTypeId)) {
@@ -801,6 +804,9 @@ export class CertificatesService {
       relations: ['authors', 'thematicAxis', 'productType', 'event'],
     });
     if (!submission) throw new NotFoundException('Postulación no encontrada');
+    if (submission.authors?.length) {
+      submission.authors.sort((a, b) => a.authorOrder - b.authorOrder);
+    }
 
     const author      = cert.author;
     const productType = await this.productTypeRepo.findOne({ where: { id: cert.productTypeId } });

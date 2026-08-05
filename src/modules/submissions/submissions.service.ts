@@ -20,6 +20,11 @@ import { computeGlobalStatus } from '../../common/utils/submission-status.util';
 import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
 
+/** Ordena en memoria un arreglo de autores por su authorOrder (ascendente). */
+function sortAuthors(authors?: SubmissionAuthor[]): void {
+  if (authors?.length) authors.sort((a, b) => a.authorOrder - b.authorOrder);
+}
+
 const STATUS_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
   [SubmissionStatus.RECEIVED]:           [SubmissionStatus.UNDER_REVIEW, SubmissionStatus.WITHDRAWN, SubmissionStatus.CANCELLED],
   [SubmissionStatus.UNDER_REVIEW]:       [SubmissionStatus.APPROVED, SubmissionStatus.REJECTED, SubmissionStatus.REVISION_REQUESTED, SubmissionStatus.WITHDRAWN, SubmissionStatus.CANCELLED],
@@ -352,7 +357,7 @@ export class SubmissionsService implements OnModuleInit {
 
   // ── Listar / buscar ─────────────────────────────────────────────────────────
 
-  findAll(filters: { eventId?: string; status?: string; thematicAxisId?: string; productTypeId?: string; search?: string }) {
+  async findAll(filters: { eventId?: string; status?: string; thematicAxisId?: string; productTypeId?: string; search?: string }) {
     const query = this.repo
       .createQueryBuilder('s')
       .leftJoinAndSelect('s.thematicAxis', 'axis')
@@ -381,7 +386,9 @@ export class SubmissionsService implements OnModuleInit {
         { q: `%${filters.search}%` },
       );
     }
-    return query.getMany();
+    const results = await query.getMany();
+    for (const s of results) sortAuthors(s.authors);
+    return results;
   }
 
   async findOne(id: string) {
@@ -396,11 +403,12 @@ export class SubmissionsService implements OnModuleInit {
     if (!s) throw new NotFoundException('Submission not found');
     // Ordenar archivos: más reciente primero
     if (s.files) s.files.sort((a, b) => b.version - a.version);
+    sortAuthors(s.authors);
     return s;
   }
 
   async findByEmail(email: string) {
-    return this.repo
+    const results = await this.repo
       .createQueryBuilder('s')
       .leftJoinAndSelect('s.authors', 'authors')
       .leftJoinAndSelect('s.thematicAxis', 'axis')
@@ -410,6 +418,8 @@ export class SubmissionsService implements OnModuleInit {
       .orderBy('s.createdAt', 'DESC')
       .addOrderBy('statusHistory.createdAt', 'ASC')
       .getMany();
+    for (const s of results) sortAuthors(s.authors);
+    return results;
   }
 
   async findByReferenceCode(referenceCode: string) {
@@ -422,6 +432,7 @@ export class SubmissionsService implements OnModuleInit {
       .where('s.referenceCode = :referenceCode', { referenceCode })
       .addOrderBy('statusHistory.createdAt', 'ASC')
       .getOne();
+    if (sub) sortAuthors(sub.authors);
     return sub ? [sub] : [];
   }
 
@@ -789,6 +800,7 @@ export class SubmissionsService implements OnModuleInit {
     const submissions = await query.getMany();
     if (!submissions.length)
       return { queued: 0, message: 'No hay postulaciones que coincidan con el filtro' };
+    for (const s of submissions) sortAuthors(s.authors);
 
     let attachmentBuffer: Buffer | undefined;
     let attachmentName: string | undefined;
