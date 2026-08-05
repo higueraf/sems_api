@@ -157,6 +157,64 @@ export class CreateSubmissionDto {
   authors: SubmissionAuthorDto[];
 }
 
+/** DTO relajado para que el admin agregue/edite autores desde el panel */
+export class AdminAuthorDto {
+  @IsString()
+  @IsNotEmpty()
+  fullName: string;
+
+  @IsString()
+  @IsOptional()
+  academicTitle?: string;
+
+  @IsString()
+  @IsOptional()
+  affiliation?: string;
+
+  @IsString()
+  @IsOptional()
+  emailType?: string;
+
+  @IsEmail({}, { message: 'El email no es válido' })
+  email: string;
+
+  @IsString()
+  @IsOptional()
+  orcid?: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
+
+  @IsUUID()
+  @IsOptional()
+  countryId?: string;
+
+  @IsString()
+  @IsOptional()
+  city?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isCorresponding?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isPresenter?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  authorOrder?: number;
+
+  @IsString()
+  @IsOptional()
+  identityDocType?: string;
+
+  @IsString()
+  @IsOptional()
+  identityDocNumber?: string;
+}
+
 export class UpdateSubmissionStatusDto {
   @IsString()
   newStatus: string;

@@ -9,17 +9,23 @@ import { SubmissionFile } from '../../entities/submission-file.entity';
 import { ScientificProductType } from '../../entities/scientific-product-type.entity';
 import { User } from '../../entities/user.entity';
 import { Certificate } from '../../entities/certificate.entity';
+import { Person } from '../../entities/person.entity';
+import { PersonsModule } from '../persons/persons.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([
-    Submission,
-    SubmissionStatusHistory,
-    SubmissionAuthor,
-    SubmissionFile,
-    ScientificProductType,
-    User,
-    Certificate,
-  ])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Submission,
+      SubmissionStatusHistory,
+      SubmissionAuthor,
+      SubmissionFile,
+      ScientificProductType,
+      User,
+      Certificate,
+      Person,
+    ]),
+    PersonsModule,
+  ],
   controllers: [SubmissionsController],
   providers: [SubmissionsService],
   exports: [SubmissionsService],

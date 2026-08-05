@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
+import * as crypto from 'crypto';
 import { Submission } from '../../entities/submission.entity';
 import { SubmissionAuthor } from '../../entities/submission-author.entity';
 import { SubmissionStatusHistory } from '../../entities/submission-status-history.entity';
@@ -10,15 +11,18 @@ import { SubmissionFile, SubmissionFileType } from '../../entities/submission-fi
 import { ScientificProductType } from '../../entities/scientific-product-type.entity';
 import { User } from '../../entities/user.entity';
 import { Certificate } from '../../entities/certificate.entity';
+import { Person } from '../../entities/person.entity';
 import {
   CreateSubmissionDto, UpdateSubmissionStatusDto,
   SendCustomEmailDto, AssignEvaluatorDto, BulkEmailDto,
-  UpdateProductTypeStatusDto,
+  UpdateProductTypeStatusDto, AdminAuthorDto,
 } from './dto/submission.dto';
 import { SubmissionStatus } from '../../common/enums/submission-status.enum';
+import { UserRole } from '../../common/enums/role.enum';
 import { computeGlobalStatus } from '../../common/utils/submission-status.util';
 import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
+import { PersonsService } from '../persons/persons.service';
 
 /** Ordena en memoria un arreglo de autores por su authorOrder (ascendente). */
 function sortAuthors(authors?: SubmissionAuthor[]): void {
@@ -87,7 +91,9 @@ export class SubmissionsService implements OnModuleInit {
     @InjectRepository(ScientificProductType)    private productTypeRepo: Repository<ScientificProductType>,
     @InjectRepository(User)                     private userRepo: Repository<User>,
     @InjectRepository(Certificate)              private certRepo: Repository<Certificate>,
+    @InjectRepository(Person)                   private personRepo: Repository<Person>,
     private mailService: MailService,
+    private personsService: PersonsService,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
 
@@ -340,7 +346,63 @@ export class SubmissionsService implements OnModuleInit {
         }
       }
 
-      // 3. Correo de confirmación
+      // 3. Vincular persons + crear cuentas de autor
+      try {
+        const authorsForPersons = await this.authorRepo.find({ where: { submissionId: saved.id } });
+        for (const author of authorsForPersons) {
+          try {
+            const person = await this.personsService.findOrCreate({
+              fullName:          author.fullName,
+              email:             author.email.toLowerCase().trim(),
+              academicTitle:     author.academicTitle,
+              affiliation:       author.affiliation,
+              orcid:             author.orcid,
+              phone:             author.phone,
+              countryId:         author.countryId,
+              city:              author.city,
+              identityDocType:   author.identityDocType,
+              identityDocNumber: author.identityDocNumber,
+            });
+            // Vincular personId al submission_author
+            await this.authorRepo.update(author.id, { personId: person.id });
+
+            // Crear cuenta de usuario si no existe
+            if (!person.userId) {
+              let userAccount = await this.userRepo.findOne({ where: { email: person.email } });
+              if (!userAccount) {
+                const tempPassword = crypto.randomBytes(5).toString('hex'); // 10 chars hex
+                userAccount = this.userRepo.create({
+                  email:     person.email,
+                  password:  tempPassword,
+                  firstName: person.fullName.split(' ')[0] ?? person.fullName,
+                  lastName:  person.fullName.split(' ').slice(1).join(' ') || '-',
+                  role:      UserRole.AUTHOR,
+                  isActive:  true,
+                });
+                await this.userRepo.save(userAccount);
+                await this.personsService.setUserId(person.id, userAccount.id);
+                // Correo de bienvenida al portal
+                const populated = await this.repo.findOne({
+                  where: { id: saved.id },
+                  relations: ['event'],
+                });
+                await this.mailService.sendAuthorWelcome(person, tempPassword, populated).catch(
+                  (e) => this.logger.error(`Error correo bienvenida autor [${author.email}]: ${e.message}`),
+                );
+              } else {
+                // Ya existe cuenta, solo vincular
+                await this.personsService.setUserId(person.id, userAccount.id);
+              }
+            }
+          } catch (e) {
+            this.logger.error(`Error procesando person para autor ${author.email}: ${e.message}`);
+          }
+        }
+      } catch (err) {
+        this.logger.error(`Error creando persons/cuentas [${referenceCode}]: ${err.message}`);
+      }
+
+      // 4. Correo de confirmación
       try {
         const populated = await this.repo.findOne({
           where: { id: saved.id },
@@ -921,5 +983,140 @@ export class SubmissionsService implements OnModuleInit {
     }
 
     return { total, byStatus, byProductType: Object.values(productMap) };
+  }
+
+  // ── Gestión de autores desde el admin ───────────────────────────────────────
+
+  async addAuthor(submissionId: string, dto: AdminAuthorDto): Promise<SubmissionAuthor> {
+    const submission = await this.repo.findOne({ where: { id: submissionId }, relations: ['authors'] });
+    if (!submission) throw new NotFoundException('Postulación no encontrada');
+
+    const nextOrder = (submission.authors ?? []).reduce((max, a) => Math.max(max, a.authorOrder), -1) + 1;
+
+    // Crear o encontrar person
+    const person = await this.personsService.findOrCreate({
+      fullName:          dto.fullName,
+      email:             dto.email.toLowerCase().trim(),
+      academicTitle:     dto.academicTitle,
+      affiliation:       dto.affiliation,
+      orcid:             dto.orcid,
+      phone:             dto.phone,
+      countryId:         dto.countryId,
+      city:              dto.city,
+      identityDocType:   dto.identityDocType,
+      identityDocNumber: dto.identityDocNumber,
+    });
+
+    const author = this.authorRepo.create({
+      submissionId,
+      personId:          person.id,
+      fullName:          dto.fullName,
+      email:             dto.email.toLowerCase().trim(),
+      academicTitle:     dto.academicTitle ?? '',
+      affiliation:       dto.affiliation,
+      emailType:         dto.emailType ?? 'personal',
+      orcid:             dto.orcid,
+      phone:             dto.phone,
+      countryId:         dto.countryId,
+      city:              dto.city,
+      identityDocType:   dto.identityDocType,
+      identityDocNumber: dto.identityDocNumber,
+      isCorresponding:   dto.isCorresponding ?? false,
+      isPresenter:       dto.isPresenter ?? true,
+      authorOrder:       dto.authorOrder ?? nextOrder,
+    });
+
+    const saved = await this.authorRepo.save(author);
+
+    // Crear cuenta de usuario si no existe
+    if (!person.userId) {
+      try {
+        let userAccount = await this.userRepo.findOne({ where: { email: person.email } });
+        if (!userAccount) {
+          const tempPassword = crypto.randomBytes(5).toString('hex');
+          userAccount = this.userRepo.create({
+            email:     person.email,
+            password:  tempPassword,
+            firstName: person.fullName.split(' ')[0] ?? person.fullName,
+            lastName:  person.fullName.split(' ').slice(1).join(' ') || '-',
+            role:      UserRole.AUTHOR,
+            isActive:  true,
+          });
+          await this.userRepo.save(userAccount);
+          await this.personsService.setUserId(person.id, userAccount.id);
+          const populated = await this.repo.findOne({ where: { id: submissionId }, relations: ['event'] });
+          await this.mailService.sendAuthorWelcome(person, tempPassword, populated).catch(
+            (e) => this.logger.error(`Error bienvenida autor admin [${person.email}]: ${e.message}`),
+          );
+        } else {
+          await this.personsService.setUserId(person.id, userAccount.id);
+        }
+      } catch (e) {
+        this.logger.warn(`No se pudo crear cuenta para ${person.email}: ${e.message}`);
+      }
+    }
+
+    return this.authorRepo.findOne({ where: { id: saved.id }, relations: ['country'] });
+  }
+
+  async updateAuthor(authorId: string, dto: AdminAuthorDto): Promise<SubmissionAuthor> {
+    const author = await this.authorRepo.findOne({ where: { id: authorId } });
+    if (!author) throw new NotFoundException('Autor no encontrado');
+
+    Object.assign(author, {
+      fullName:          dto.fullName          ?? author.fullName,
+      academicTitle:     dto.academicTitle     ?? author.academicTitle,
+      affiliation:       dto.affiliation       ?? author.affiliation,
+      emailType:         dto.emailType         ?? author.emailType,
+      email:             dto.email             ? dto.email.toLowerCase().trim() : author.email,
+      orcid:             dto.orcid             ?? author.orcid,
+      phone:             dto.phone             ?? author.phone,
+      countryId:         dto.countryId         ?? author.countryId,
+      city:              dto.city              ?? author.city,
+      identityDocType:   dto.identityDocType   ?? author.identityDocType,
+      identityDocNumber: dto.identityDocNumber ?? author.identityDocNumber,
+      isCorresponding:   dto.isCorresponding   ?? author.isCorresponding,
+      isPresenter:       dto.isPresenter       ?? author.isPresenter,
+      authorOrder:       dto.authorOrder       ?? author.authorOrder,
+    });
+
+    const saved = await this.authorRepo.save(author);
+
+    // Propagar cambios a la person vinculada
+    if (author.personId) {
+      await this.personsService.update(author.personId, {
+        fullName:          dto.fullName,
+        academicTitle:     dto.academicTitle,
+        affiliation:       dto.affiliation,
+        orcid:             dto.orcid,
+        phone:             dto.phone,
+        countryId:         dto.countryId,
+        city:              dto.city,
+        identityDocType:   dto.identityDocType,
+        identityDocNumber: dto.identityDocNumber,
+      }).catch(() => { /* no bloquear */ });
+    }
+
+    return this.authorRepo.findOne({ where: { id: saved.id }, relations: ['country'] });
+  }
+
+  async removeAuthor(authorId: string): Promise<{ success: boolean }> {
+    const author = await this.authorRepo.findOne({ where: { id: authorId } });
+    if (!author) throw new NotFoundException('Autor no encontrado');
+
+    // Verificar que no sea el último autor
+    const count = await this.authorRepo.count({ where: { submissionId: author.submissionId } });
+    if (count <= 1)
+      throw new BadRequestException('No se puede eliminar el último autor de la postulación');
+
+    // Verificar que no tenga certificados emitidos
+    const hasCerts = await this.certRepo.count({ where: { authorId } });
+    if (hasCerts > 0)
+      throw new BadRequestException(
+        'No se puede eliminar este autor porque ya tiene certificados emitidos',
+      );
+
+    await this.authorRepo.remove(author);
+    return { success: true };
   }
 }

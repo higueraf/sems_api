@@ -11,7 +11,9 @@ import { Repository } from 'typeorm';
 import { EmailLog, EmailType } from '../../entities/email-log.entity';
 import { Submission } from '../../entities/submission.entity';
 import { AgendaSlot } from '../../entities/agenda-slot.entity';
-import { SubmissionStatus } from '../../common/enums/submission-status.enum';
+import { Event } from '../../entities/event.entity';
+import { ThematicAxis } from '../../entities/thematic-axis.entity';
+import { SubmissionStatus, EventFormat } from '../../common/enums/submission-status.enum';
 import { MailTransport, MailAttachment, createMailTransport } from './transports';
 
 // Tipo unificado para adjuntos — acepta tanto Multer.File como objeto plano {buffer, ...}
@@ -20,6 +22,40 @@ type AttachmentLike = {
   originalname: string;
   mimetype: string;
 };
+
+/** Datos de "branding" del evento, derivados dinámicamente para las plantillas de correo */
+interface EventBranding {
+  name: string;
+  year: number;
+  dateRangeLabel: string;
+  locationLabel: string;
+  formatLabel: string;
+  certifiedHoursLabel: string;
+  attendeesLabel: string;
+  axesLabel: string;
+  siteUrl: string;
+}
+
+const FORMAT_LABELS: Record<string, string> = {
+  [EventFormat.IN_PERSON]: 'Modalidad Presencial',
+  [EventFormat.ONLINE]: 'Modalidad Virtual',
+  [EventFormat.HYBRID]: 'Modalidad Híbrida',
+};
+
+const MONTHS_ES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
+function formatDateRange(start?: Date | string, end?: Date | string): string {
+  if (!start) return '';
+  const s = new Date(start);
+  const e = end ? new Date(end) : s;
+  const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
+  const monthLabel = MONTHS_ES[e.getMonth()];
+  if (sameMonth) return `${s.getDate()}–${e.getDate()} ${monthLabel} ${e.getFullYear()}`;
+  return `${s.getDate()} ${MONTHS_ES[s.getMonth()]} – ${e.getDate()} ${monthLabel} ${e.getFullYear()}`;
+}
 
 @Injectable()
 export class MailService implements OnModuleInit {
@@ -30,6 +66,8 @@ export class MailService implements OnModuleInit {
   constructor(
     private configService: ConfigService,
     @InjectRepository(EmailLog) private emailLogRepo: Repository<EmailLog>,
+    @InjectRepository(Event) private eventRepo: Repository<Event>,
+    @InjectRepository(ThematicAxis) private axisRepo: Repository<ThematicAxis>,
   ) {
     this.transport   = createMailTransport(configService);
     this.fromAddress = configService.get<string>('mail.from') || 'SEMS <noreply@sems.edu>';
@@ -51,17 +89,79 @@ export class MailService implements OnModuleInit {
   }
 
   // ════════════════════════════════════════════════════════════════════════════
+  // EVENTO ACTIVO — resolución dinámica de datos para las plantillas
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Resuelve el evento a usar como "branding" del correo: usa el evento de la
+   * postulación si está disponible (por eventId o por relación ya cargada);
+   * si no, cae al evento activo (isActive = true). Si tampoco hay evento activo,
+   * retorna un branding genérico para no romper el envío de correos.
+   */
+  private async resolveEvent(hint?: { event?: Event; eventId?: string } | null): Promise<Event | null> {
+    if (hint?.event) return hint.event;
+    if (hint?.eventId) {
+      const byId = await this.eventRepo.findOne({ where: { id: hint.eventId } });
+      if (byId) return byId;
+    }
+    return this.eventRepo.findOne({ where: { isActive: true } });
+  }
+
+  private async getBranding(hint?: { event?: Event; eventId?: string } | null): Promise<EventBranding> {
+    const event = await this.resolveEvent(hint);
+
+    if (!event) {
+      return {
+        name: 'SEMS',
+        year: new Date().getFullYear(),
+        dateRangeLabel: '',
+        locationLabel: '',
+        formatLabel: '',
+        certifiedHoursLabel: '',
+        attendeesLabel: '',
+        axesLabel: '',
+        siteUrl: 'https://simposio.umayor.edu.co',
+      };
+    }
+
+    const axesCount = event.id
+      ? await this.axisRepo.count({ where: { eventId: event.id, isActive: true } })
+      : 0;
+
+    return {
+      name: event.name,
+      year: event.startDate ? new Date(event.startDate).getFullYear() : new Date().getFullYear(),
+      dateRangeLabel: formatDateRange(event.startDate, event.endDate),
+      locationLabel: event.city || event.location || '',
+      formatLabel: FORMAT_LABELS[event.format] || '',
+      certifiedHoursLabel: event.certifiedHours ? `🎓 ${event.certifiedHours}h certificadas` : '',
+      attendeesLabel: event.expectedAttendees ? `👥 +${event.expectedAttendees} participantes` : '',
+      axesLabel: axesCount ? `📚 ${axesCount} ejes temáticos` : '',
+      siteUrl: 'https://simposio.umayor.edu.co',
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
   // TEMPLATE BASE HTML
   // ════════════════════════════════════════════════════════════════════════════
 
-  private buildBaseLayout(content: string): string {
+  private buildBaseLayout(content: string, branding: EventBranding): string {
     const year = new Date().getFullYear();
+    const headerMeta = [
+      branding.dateRangeLabel ? `📅 ${branding.dateRangeLabel}` : '',
+      branding.locationLabel ? `📍 ${branding.locationLabel}` : '',
+      branding.formatLabel ? `🌐 ${branding.formatLabel}` : '',
+    ].filter(Boolean).map(s => `<span style="margin-right:15px;">${s}</span>`).join('');
+
+    const footerMeta = [branding.certifiedHoursLabel, branding.attendeesLabel, branding.axesLabel]
+      .filter(Boolean).map(s => `<span style="margin-right:15px;">${s}</span>`).join('');
+
     return `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>II Simposio Internacional de Ciencia Abierta</title>
+  <title>${branding.name}</title>
   <style>
     .info-row{padding:8px 0;border-bottom:1px solid #d0e6d8;}
     .info-row:last-child{border-bottom:none;}
@@ -77,12 +177,10 @@ export class MailService implements OnModuleInit {
   <div style="background-color:#f0f4f1;padding:20px 0;">
     <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.1);">
       <div style="background-color:#003918;padding:20px 30px;color:white;">
-        <div style="font-size:11px;color:#7ee8a2;text-transform:uppercase;margin-bottom:5px;">II Simposio Internacional de Ciencia Abierta</div>
-        <div style="font-size:24px;font-weight:bold;margin-bottom:10px;">CIENCIA <span style="color:#7ee8a2;">ABIERTA</span> 2026</div>
+        <div style="font-size:11px;color:#7ee8a2;text-transform:uppercase;margin-bottom:5px;">${branding.name}</div>
+        <div style="font-size:24px;font-weight:bold;margin-bottom:10px;">CIENCIA <span style="color:#7ee8a2;">ABIERTA</span> ${branding.year}</div>
         <div style="font-size:12px;color:#a0d8b3;">
-          <span style="margin-right:15px;">📅 18–22 mayo 2026</span>
-          <span style="margin-right:15px;">📍 Cartagena de Indias</span>
-          <span>🌐 Modalidad Híbrida</span>
+          ${headerMeta}
         </div>
       </div>
       <div class="email-content" style="padding:30px;color:#333333;line-height:1.6;">
@@ -90,23 +188,21 @@ export class MailService implements OnModuleInit {
       </div>
       <div style="background-color:#003918;color:white;">
         <div style="background-color:#007F3A;padding:20px 30px;">
-          <div style="font-size:16px;font-weight:bold;margin-bottom:10px;">CIENCIA <span style="color:#7ee8a2;">ABIERTA</span> 2026</div>
+          <div style="font-size:16px;font-weight:bold;margin-bottom:10px;">CIENCIA <span style="color:#7ee8a2;">ABIERTA</span> ${branding.year}</div>
           <div style="font-size:12px;color:#a0d8b3;">
-            <span style="margin-right:15px;">🎓 80h certificadas</span>
-            <span style="margin-right:15px;">👥 +500 participantes</span>
-            <span>📚 6 ejes temáticos</span>
+            ${footerMeta}
           </div>
         </div>
         <div style="padding:20px 30px;font-size:12px;color:#a0d8b3;">
           <div style="margin-bottom:10px;">
-            <a href="https://simposio.umayor.edu.co" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Sitio oficial</a>
-            <a href="https://simposio.umayor.edu.co/pautas" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Pautas</a>
-            <a href="https://simposio.umayor.edu.co/verificar" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Verificar</a>
-            <a href="https://simposio.umayor.edu.co/agenda" style="color:#7ee8a2;text-decoration:none;">Agenda</a>
+            <a href="${branding.siteUrl}" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Sitio oficial</a>
+            <a href="${branding.siteUrl}/pautas" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Pautas</a>
+            <a href="${branding.siteUrl}/verificar" style="color:#7ee8a2;text-decoration:none;margin-right:15px;">Verificar</a>
+            <a href="${branding.siteUrl}/agenda" style="color:#7ee8a2;text-decoration:none;">Agenda</a>
           </div>
           <div style="color:#6a8f76;">
             Este correo fue generado automáticamente por SEMS. Por favor no responda directamente.<br>
-            © ${year} II Simposio Internacional de Ciencia Abierta · Cartagena de Indias, Colombia
+            © ${year} ${branding.name}${branding.locationLabel ? ` · ${branding.locationLabel}` : ''}
           </div>
         </div>
         <div style="height:4px;background:linear-gradient(90deg,#007F3A,#E60553,#007F3A);"></div>
@@ -181,6 +277,8 @@ export class MailService implements OnModuleInit {
     const author = submission.authors?.find((a) => a.isCorresponding) ?? submission.authors?.[0];
     if (!author) return this.logger.error(`Sin autor para postulación ${submission.id}`);
 
+    const branding = await this.getBranding(submission);
+
     const receivedDate = new Date().toLocaleDateString('es-ES', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
@@ -188,7 +286,7 @@ export class MailService implements OnModuleInit {
     const content = `
       <div style="font-size:18px;font-weight:bold;color:#003918;margin-bottom:20px;">Estimado/a ${author.fullName},</div>
       <p style="color:#333333;margin-bottom:16px;">
-        Nos complace comunicarle que su postulación al <strong>II Simposio Internacional de Ciencia Abierta 2026</strong>
+        Nos complace comunicarle que su postulación al <strong>${branding.name} ${branding.year}</strong>
         ha sido <strong>recibida satisfactoriamente</strong> en nuestro sistema de gestión académica.
       </p>
       <div style="background-color:#003918;border-radius:8px;padding:20px;margin:20px 0;text-align:center;">
@@ -221,20 +319,22 @@ export class MailService implements OnModuleInit {
       <div style="margin-top:30px;padding-top:20px;border-top:1px solid #e0e0e0;">
         <p style="margin:5px 0;color:#666;">Con los mejores deseos académicos,</p>
         <p style="margin:5px 0;"><strong style="color:#003918;">Comité Organizador</strong></p>
-        <p style="margin:5px 0;color:#007F3A;">II Simposio Internacional de Ciencia Abierta 2026</p>
+        <p style="margin:5px 0;color:#007F3A;">${branding.name} ${branding.year}</p>
       </div>
     `;
 
     return this.send(
       author.email, author.fullName,
       `[SEMS] Postulación recibida — ${submission.referenceCode}`,
-      this.buildBaseLayout(content), EmailType.SUBMISSION_RECEIVED, submission.id,
+      this.buildBaseLayout(content, branding), EmailType.SUBMISSION_RECEIVED, submission.id,
     );
   }
 
   async sendStatusChanged(submission: Submission, newStatus: SubmissionStatus, notes?: string) {
     const author = submission.authors?.find((a) => a.isCorresponding) ?? submission.authors?.[0];
     if (!author) return;
+
+    const branding = await this.getBranding(submission);
 
     type StatusInfo = {
       label: string; badgeBg: string; badgeColor: string;
@@ -311,20 +411,22 @@ export class MailService implements OnModuleInit {
       <div style="margin-top:30px;padding-top:20px;border-top:1px solid #e0e0e0;">
         <p style="margin:5px 0;color:#666;">Cordialmente,</p>
         <p style="margin:5px 0;"><strong style="color:#003918;">Comité Organizador</strong></p>
-        <p style="margin:5px 0;color:#007F3A;">II Simposio Internacional de Ciencia Abierta 2026</p>
+        <p style="margin:5px 0;color:#007F3A;">${branding.name} ${branding.year}</p>
       </div>
     `;
 
     return this.send(
       author.email, author.fullName,
       `[SEMS] ${info.headline} — ${submission.referenceCode}`,
-      this.buildBaseLayout(content), EmailType.STATUS_CHANGED, submission.id,
+      this.buildBaseLayout(content, branding), EmailType.STATUS_CHANGED, submission.id,
     );
   }
 
   async sendScheduleAssigned(submission: Submission, slot: AgendaSlot) {
     const author = submission.authors?.find((a) => a.isCorresponding) ?? submission.authors?.[0];
     if (!author) return;
+
+    const branding = await this.getBranding(submission);
 
     const dayStr = new Date(slot.day).toLocaleDateString('es-ES', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -349,14 +451,14 @@ export class MailService implements OnModuleInit {
       <div style="margin-top:30px;padding-top:20px;border-top:1px solid #e0e0e0;">
         <p style="margin:5px 0;color:#666;">Con entusiasmo,</p>
         <p style="margin:5px 0;"><strong style="color:#003918;">Comité Organizador</strong></p>
-        <p style="margin:5px 0;color:#007F3A;">II Simposio Internacional de Ciencia Abierta 2026</p>
+        <p style="margin:5px 0;color:#007F3A;">${branding.name} ${branding.year}</p>
       </div>
     `;
 
     return this.send(
       author.email, author.fullName,
       `[SEMS] Su presentación ha sido programada — ${submission.referenceCode}`,
-      this.buildBaseLayout(content), EmailType.SCHEDULE_ASSIGNED, submission.id,
+      this.buildBaseLayout(content, branding), EmailType.SCHEDULE_ASSIGNED, submission.id,
     );
   }
 
@@ -373,6 +475,7 @@ export class MailService implements OnModuleInit {
     sentById?: string,
     attachment?: AttachmentLike,
   ) {
+    const branding = await this.getBranding(null);
     const content = `
       <div style="font-size:18px;font-weight:bold;color:#003918;margin-bottom:20px;">Estimado/a ${toName},</div>
       <div style="height:1px;background-color:#e0e0e0;margin:25px 0;"></div>
@@ -381,7 +484,7 @@ export class MailService implements OnModuleInit {
       <div style="margin-top:30px;padding-top:20px;border-top:1px solid #e0e0e0;">
         <p style="margin:5px 0;color:#666;">Atentamente,</p>
         <p style="margin:5px 0;"><strong style="color:#003918;">Comité Organizador</strong></p>
-        <p style="margin:5px 0;color:#007F3A;">II Simposio Internacional de Ciencia Abierta 2026</p>
+        <p style="margin:5px 0;color:#007F3A;">${branding.name} ${branding.year}</p>
       </div>
     `;
 
@@ -397,7 +500,7 @@ export class MailService implements OnModuleInit {
 
     return this.send(
       toEmail, toName, subject,
-      this.buildBaseLayout(content),
+      this.buildBaseLayout(content, branding),
       EmailType.CUSTOM,
       submissionId,
       sentById,
@@ -435,11 +538,13 @@ export class MailService implements OnModuleInit {
     const author = submission.authors?.find((a) => a.isCorresponding) ?? submission.authors?.[0];
     if (!author) return;
 
+    const branding = await this.getBranding(submission);
+
     const content = `
       <div style="font-size:18px;font-weight:bold;color:#003918;margin-bottom:20px;">Estimado/a ${author.fullName},</div>
       <p style="color:#333333;margin-bottom:16px;">
         Le informamos que se ha asignado un <strong>evaluador/revisor</strong> a su postulación en el
-        <strong>II Simposio Internacional de Ciencia Abierta 2026</strong>.
+        <strong>${branding.name} ${branding.year}</strong>.
       </p>
       <div style="background-color:#f0f9f4;border-left:4px solid #007F3A;padding:20px;margin:20px 0;border-radius:0 4px 4px 0;">
         <div style="font-size:14px;font-weight:bold;color:#007F3A;text-transform:uppercase;margin-bottom:15px;">Datos de su evaluador</div>
@@ -457,14 +562,14 @@ export class MailService implements OnModuleInit {
       <div style="margin-top:30px;padding-top:20px;border-top:1px solid #e0e0e0;">
         <p style="margin:5px 0;color:#666;">Con los mejores deseos académicos,</p>
         <p style="margin:5px 0;"><strong style="color:#003918;">Comité Organizador</strong></p>
-        <p style="margin:5px 0;color:#007F3A;">II Simposio Internacional de Ciencia Abierta 2026</p>
+        <p style="margin:5px 0;color:#007F3A;">${branding.name} ${branding.year}</p>
       </div>
     `;
 
     return this.send(
       author.email, author.fullName,
       `[SEMS] Evaluador asignado a su postulación — ${submission.referenceCode}`,
-      this.buildBaseLayout(content), EmailType.SUBMISSION_RECEIVED, submission.id,
+      this.buildBaseLayout(content, branding), EmailType.SUBMISSION_RECEIVED, submission.id,
     );
   }
 
@@ -480,5 +585,70 @@ export class MailService implements OnModuleInit {
     } catch (err) {
       return { ok: false, transport: this.transport.name, message: err.message };
     }
+  }
+
+  /** Correo de bienvenida al portal de autores con credenciales de acceso */
+  async sendAuthorWelcome(
+    person: { email: string; fullName: string },
+    tempPassword: string,
+    submission?: { referenceCode?: string; titleEs?: string; event?: Event } | null,
+  ) {
+    const branding = await this.getBranding(submission?.event ? { event: submission.event } : null);
+    const portalUrl = 'https://simposio.umayor.edu.co/portal/login';
+    const content = `
+      <div style="font-size:18px;font-weight:bold;color:#003918;margin-bottom:20px;">Estimado/a ${person.fullName},</div>
+      <p style="color:#333333;margin-bottom:16px;">
+        Se ha creado automáticamente una <strong>cuenta de acceso al Portal de Autores</strong>
+        del ${branding.name} ${branding.year}, donde podrá consultar el progreso
+        de sus postulaciones, descargar sus certificados y enviar correcciones cuando sea necesario.
+      </p>
+
+      <div style="background-color:#003918;border-radius:8px;padding:20px;margin:20px 0;">
+        <div style="font-size:12px;color:#7ee8a2;text-transform:uppercase;margin-bottom:12px;">Sus credenciales de acceso</div>
+        <div style="margin-bottom:8px;">
+          <span style="color:#a0d8b3;font-size:12px;">Correo electrónico</span><br>
+          <span style="color:white;font-family:monospace;font-size:15px;">${person.email}</span>
+        </div>
+        <div>
+          <span style="color:#a0d8b3;font-size:12px;">Contraseña temporal</span><br>
+          <span style="color:#7ee8a2;font-family:monospace;font-size:20px;font-weight:bold;">${tempPassword}</span>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin:25px 0;">
+        <a href="${portalUrl}" style="display:inline-block;background-color:#007F3A;color:white;padding:14px 30px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">
+          Acceder al Portal →
+        </a>
+      </div>
+
+      ${submission?.referenceCode ? `
+      <div style="background-color:#f0f9f4;border-left:4px solid #007F3A;padding:15px 20px;margin:20px 0;border-radius:0 4px 4px 0;">
+        <div style="font-size:13px;font-weight:bold;color:#007F3A;margin-bottom:8px;">Postulación vinculada</div>
+        <div style="color:#374840;font-size:13px;">
+          <strong>${submission.referenceCode}</strong>${submission.titleEs ? ` — ${submission.titleEs}` : ''}
+        </div>
+      </div>` : ''}
+
+      <div style="background-color:#fffbeb;border-left:4px solid #f59e0b;padding:15px 20px;margin:20px 0;border-radius:0 4px 4px 0;">
+        <p style="color:#92400e;margin:0;font-size:13px;">
+          <strong>Recomendamos cambiar su contraseña</strong> la primera vez que acceda al portal.
+          Guarde esta información en un lugar seguro.
+        </p>
+      </div>
+
+      <div style="margin-top:30px;padding-top:20px;border-top:1px solid #e0e0e0;">
+        <p style="margin:5px 0;color:#666;">Con los mejores deseos académicos,</p>
+        <p style="margin:5px 0;"><strong style="color:#003918;">Comité Organizador</strong></p>
+        <p style="margin:5px 0;color:#007F3A;">${branding.name} ${branding.year}</p>
+      </div>
+    `;
+
+    return this.send(
+      person.email, person.fullName,
+      '[SEMS] Acceso al Portal de Autores — Credenciales de ingreso',
+      this.buildBaseLayout(content, branding),
+      EmailType.CUSTOM,
+      submission?.referenceCode ? undefined : undefined,
+    );
   }
 }

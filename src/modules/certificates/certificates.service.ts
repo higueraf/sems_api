@@ -730,9 +730,9 @@ export class CertificatesService {
           titleEs:          submission.titleEs,
           productTypeName:  productType?.name ?? 'Producción Científica',
           thematicAxisName: submission.thematicAxis?.name ?? '',
-          eventName:        event?.name ?? 'II Simposio Internacional de Ciencia Abierta',
+          eventName:        event?.name ?? 'Simposio',
           eventDates,
-          eventCity:        event?.city ?? event?.location ?? 'Cartagena de Indias, Colombia',
+          eventCity:        event?.city ?? event?.location ?? '',
           certificateNumber: certNumber,
           verificationUrl,
           headerLogoBuffer,
@@ -848,9 +848,9 @@ export class CertificatesService {
         titleEs:          submission.titleEs,
         productTypeName:  productType?.name ?? 'Producción Científica',
         thematicAxisName: submission.thematicAxis?.name ?? '',
-        eventName:        event?.name ?? 'II Simposio Internacional de Ciencia Abierta',
+        eventName:        event?.name ?? 'Simposio',
         eventDates,
-        eventCity:        event?.city ?? event?.location ?? 'Cartagena de Indias, Colombia',
+        eventCity:        event?.city ?? event?.location ?? '',
         certificateNumber: cert.certificateNumber,
         verificationUrl,
         headerLogoBuffer,
@@ -941,6 +941,7 @@ export class CertificatesService {
         cert.productTypeName ?? '',
         cert.certificateNumber,
         verifyUrl,
+        cert.submission?.event ?? null,
       );
 
       const ok = await this.mailService.sendCertificateEmail(
@@ -1162,7 +1163,10 @@ export class CertificatesService {
     productTypeName: string,
     certificateNumber: string,
     verificationUrl: string,
+    event: Event | null,
   ): string {
+    const eventName = event?.name ?? 'Simposio';
+    const eventYear  = event?.startDate ? new Date(event.startDate).getFullYear() : new Date().getFullYear();
     const year = new Date().getFullYear();
     const shortTitle = titleEs.length > 80 ? titleEs.substring(0, 80) + '...' : titleEs;
     return `<!DOCTYPE html>
@@ -1172,7 +1176,7 @@ export class CertificatesService {
   <div style="background-color:#f0f4f1;padding:20px 0;">
     <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.1);">
       <div style="background-color:#003918;padding:20px 30px;color:white;">
-        <div style="font-size:11px;color:#7ee8a2;text-transform:uppercase;margin-bottom:5px;">II Simposio Internacional de Ciencia Abierta</div>
+        <div style="font-size:11px;color:#7ee8a2;text-transform:uppercase;margin-bottom:5px;">${eventName}</div>
         <h1 style="margin:0;font-size:22px;font-weight:bold;">Constancia de Participación</h1>
         <p style="margin:5px 0 0;font-size:13px;color:#a7f3d0;">Documento oficial del evento</p>
       </div>
@@ -1180,7 +1184,7 @@ export class CertificatesService {
         <p style="color:#374840;font-size:15px;">Estimado/a <strong>${authorName}</strong>,</p>
         <p style="color:#374840;font-size:14px;line-height:1.6;">
           Es un placer hacerle entrega de su <strong>Constancia de Participación</strong> en el
-          <strong>II Simposio Internacional de Ciencia Abierta 2026</strong>.
+          <strong>${eventName} ${eventYear}</strong>.
         </p>
         <div style="background:#f0f9f4;border-left:4px solid #003918;padding:16px;margin:20px 0;border-radius:4px;">
           <p style="margin:0 0 6px;font-size:12px;color:#6b7280;text-transform:uppercase;font-weight:bold;">Tipo de producción</p>
@@ -1199,7 +1203,7 @@ export class CertificatesService {
         <p style="color:#374840;font-size:13px;">URL de verificación: <a href="${verificationUrl}" style="color:#007F3A;">${verificationUrl}</a></p>
       </div>
       <div style="background:#f0f4f1;padding:16px 30px;text-align:center;font-size:11px;color:#6b7280;">
-        © ${year} II Simposio Internacional de Ciencia Abierta. Todos los derechos reservados.
+        © ${year} ${eventName}. Todos los derechos reservados.
       </div>
     </div>
   </div>
@@ -1208,7 +1212,7 @@ export class CertificatesService {
   }
 
   private formatEventDates(event: Event | null): string {
-    if (!event?.startDate) return '2026';
+    if (!event?.startDate) return `${new Date().getFullYear()}`;
     // Usar UTC para evitar desfase de zona horaria (las fechas se guardan como YYYY-MM-DD en UTC)
     const utcDay  = (d: Date) => d.getUTCDate();
     const utcFmt  = (d: Date) => d.toLocaleDateString('es-ES', {

@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, UseGuards, Query,
+  Controller, Get, Post, Patch, Delete, Put, Param, Body, UseGuards, Query,
   UseInterceptors, UploadedFile, UploadedFiles,
   Injectable, NestInterceptor, ExecutionContext, CallHandler,
 } from '@nestjs/common';
@@ -12,7 +12,7 @@ import { SubmissionFileType } from '../../entities/submission-file.entity';
 import {
   CreateSubmissionDto, UpdateSubmissionStatusDto,
   SendCustomEmailDto, AssignEvaluatorDto, BulkEmailDto,
-  UpdateProductTypeStatusDto,
+  UpdateProductTypeStatusDto, AdminAuthorDto,
 } from './dto/submission.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -352,5 +352,40 @@ export class SubmissionsController {
   @Post('admin/bulk-email')
   sendBulkEmail(@Body() dto: BulkEmailDto, @CurrentUser() user: User) {
     return this.service.sendBulkEmail(dto, user);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // GESTIÓN DE AUTORES DESDE EL ADMIN
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /** POST /api/submissions/:id/authors — Agrega un autor a una postulación existente */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/authors')
+  addAuthor(@Param('id') id: string, @Body() dto: AdminAuthorDto) {
+    return this.service.addAuthor(id, dto);
+  }
+
+  /** PUT /api/submissions/:id/authors/:authorId — Edita los datos de un autor */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Put(':id/authors/:authorId')
+  updateAuthor(
+    @Param('id') _submissionId: string,
+    @Param('authorId') authorId: string,
+    @Body() dto: AdminAuthorDto,
+  ) {
+    return this.service.updateAuthor(authorId, dto);
+  }
+
+  /** DELETE /api/submissions/:id/authors/:authorId — Elimina un autor */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Delete(':id/authors/:authorId')
+  removeAuthor(
+    @Param('id') _submissionId: string,
+    @Param('authorId') authorId: string,
+  ) {
+    return this.service.removeAuthor(authorId);
   }
 }

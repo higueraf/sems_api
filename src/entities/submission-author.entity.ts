@@ -4,6 +4,7 @@ import {
 } from 'typeorm';
 import { Submission } from './submission.entity';
 import { Country } from './country.entity';
+import { Person } from './person.entity';
 
 export enum AcademicTitle {
   STUDENT      = 'Estudiante',
@@ -99,6 +100,14 @@ export class SubmissionAuthor {
   /** Marcado como ponente: recibirá el certificado de ponencia */
   @Column({ default: true })
   isPresenter: boolean;
+
+  /** Vínculo al registro global de personas (M:M deduplicado) */
+  @ManyToOne(() => Person, { nullable: true, eager: false })
+  @JoinColumn({ name: 'personId' })
+  person: Person;
+
+  @Column({ nullable: true })
+  personId: string;
 
   @CreateDateColumn()
   createdAt: Date;
