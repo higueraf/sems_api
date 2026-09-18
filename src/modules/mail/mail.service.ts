@@ -371,7 +371,7 @@ export class MailService implements OnModuleInit {
       scheduled: {
         label: 'Programada', badgeBg: '#ede9fe', badgeColor: '#5b21b6',
         headline: '¡Su presentación ha sido programada!',
-        intro: 'Su trabajo ha sido <strong>incluido en la agenda académica</strong> del Simposio.',
+        intro: 'Su trabajo ha sido <strong>incluido en la agenda académica</strong> del III Simposio.',
         closing: 'Próximamente recibirá los detalles de su presentación.',
       },
       withdrawn: {
@@ -434,7 +434,7 @@ export class MailService implements OnModuleInit {
 
     const content = `
       <div style="font-size:18px;font-weight:bold;color:#003918;margin-bottom:20px;">Estimado/a ${author.fullName},</div>
-      <p style="color:#333333;margin-bottom:16px;">Su presentación ha sido <strong>oficialmente programada</strong> en la agenda del Simposio.</p>
+      <p style="color:#333333;margin-bottom:16px;">Su presentación ha sido <strong>oficialmente programada</strong> en la agenda del III Simposio.</p>
       <div style="background-color:#f0f9f4;border-left:4px solid #007F3A;padding:20px;margin:20px 0;border-radius:0 4px 4px 0;">
         <div style="padding:8px 0;border-bottom:1px solid #d0e6d8;"><span style="font-weight:bold;color:#005c2a;display:inline-block;min-width:140px;">Código</span><span style="font-family:'Courier New',monospace;font-weight:bold;color:#003918;">${submission.referenceCode}</span></div>
         <div style="padding:8px 0;border-bottom:1px solid #d0e6d8;"><span style="font-weight:bold;color:#005c2a;display:inline-block;min-width:140px;">Título</span><span style="color:#374840;">${submission.titleEs}</span></div>
@@ -517,7 +517,7 @@ export class MailService implements OnModuleInit {
     toName: string,
     subject: string,
     html: string,
-    submissionId: string,
+    submissionId: string | undefined,
     sentById: string,
     pdfAttachments?: { buffer: Buffer; fileName: string }[],
   ): Promise<boolean> {

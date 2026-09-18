@@ -23,6 +23,9 @@ import { StorageModule } from './modules/storage/storage.module';
 import { CertificatesModule } from './modules/certificates/certificates.module';
 import { PersonsModule } from './modules/persons/persons.module';
 import { PortalModule } from './modules/portal/portal.module';
+import { UniversitiesModule } from './modules/universities/universities.module';
+import { FacultiesModule } from './modules/faculties/faculties.module';
+import { ResearchGroupsModule } from './modules/research-groups/research-groups.module';
 
 import { User } from './entities/user.entity';
 import { Country } from './entities/country.entity';
@@ -43,6 +46,9 @@ import { EventVideo } from './entities/event-video.entity';
 import { Workshop } from './entities/workshop.entity';
 import { Certificate } from './entities/certificate.entity';
 import { Person } from './entities/person.entity';
+import { University } from './entities/university.entity';
+import { Faculty } from './entities/faculty.entity';
+import { ResearchGroup } from './entities/research-group.entity';
 
 @Module({
   imports: [
@@ -66,7 +72,8 @@ import { Person } from './entities/person.entity';
           User, Country, Event, EventVideo, EventPageSection, ScientificProductType,
           ThematicAxis, Organizer, OrganizerMember, Guideline, Submission,
           SubmissionAuthor, SubmissionStatusHistory, SubmissionFile,
-          AgendaSlot, EmailLog, Workshop, Certificate, Person,
+          AgendaSlot, EmailLog, Workshop, Certificate, Person, University,
+          Faculty, ResearchGroup,
         ],
         synchronize: true,
         logging: false,
@@ -79,6 +86,9 @@ import { Person } from './entities/person.entity';
     AuthModule,
     UsersModule,
     CountriesModule,
+    UniversitiesModule,
+    FacultiesModule,
+    ResearchGroupsModule,
     EventsModule,
     PageSectionsModule,
     ThematicAxesModule,

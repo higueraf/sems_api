@@ -11,6 +11,7 @@ import { UserRole } from '../../common/enums/role.enum';
 import { User } from '../../entities/user.entity';
 import {
   GenerateCertificatesDto, SendCertificatesDto, BulkGenerateAndSendDto, CertificateFiltersDto,
+  GeneratePeerReviewerCertificateDto,
 } from './dto/certificate.dto';
 
 @Controller('certificates')
@@ -74,6 +75,17 @@ export class CertificatesController {
   @Post('bulk-generate-and-send')
   bulkGenerateAndSend(@Body() dto: BulkGenerateAndSendDto, @CurrentUser() user: User) {
     return this.service.bulkGenerateAndSend(dto, user);
+  }
+
+  /** Genera y envía manualmente el certificado de "Par Académico" a un evaluador */
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('generate-and-send-peer-reviewer')
+  generateAndSendPeerReviewerCertificate(
+    @Body() dto: GeneratePeerReviewerCertificateDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.generateAndSendPeerReviewerCertificate(dto, user);
   }
 
   @UseGuards(RolesGuard)

@@ -41,4 +41,14 @@ export class CertificateFiltersDto {
   @IsString()
   @IsOptional()
   submissionId?: string;
+
+  @IsString()
+  @IsOptional()
+  certificateType?: string; // 'author' | 'peer_reviewer'
+}
+
+/** Certificado de par académico: uno por cada capítulo de libro revisado (submissionId). */
+export class GeneratePeerReviewerCertificateDto {
+  @IsUUID()
+  submissionId: string;
 }

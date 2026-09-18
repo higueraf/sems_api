@@ -18,11 +18,13 @@ import {
   UpdateProductTypeStatusDto, AdminAuthorDto,
 } from './dto/submission.dto';
 import { SubmissionStatus } from '../../common/enums/submission-status.enum';
+import { ParticipantType } from '../../common/enums/participant-type.enum';
 import { UserRole } from '../../common/enums/role.enum';
 import { computeGlobalStatus } from '../../common/utils/submission-status.util';
 import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
 import { PersonsService } from '../persons/persons.service';
+import { UniversitiesService } from '../universities/universities.service';
 
 /** Ordena en memoria un arreglo de autores por su authorOrder (ascendente). */
 function sortAuthors(authors?: SubmissionAuthor[]): void {
@@ -94,8 +96,21 @@ export class SubmissionsService implements OnModuleInit {
     @InjectRepository(Person)                   private personRepo: Repository<Person>,
     private mailService: MailService,
     private personsService: PersonsService,
+    private universitiesService: UniversitiesService,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
+
+  /** Resuelve universityId: usa el existente, o crea/reutiliza una universidad por nombre dentro del país dado. */
+  private async resolveUniversityId(
+    universityId?: string, universityName?: string, countryId?: string,
+  ): Promise<string | undefined> {
+    if (universityId) return universityId;
+    if (universityName && countryId) {
+      const university = await this.universitiesService.findOrCreate({ name: universityName, countryId });
+      return university.id;
+    }
+    return undefined;
+  }
 
   async onModuleInit() {
     try {
@@ -205,6 +220,44 @@ export class SubmissionsService implements OnModuleInit {
     const initialProductStatuses: Record<string, string> = {};
     for (const ptId of allProductTypeIds) {
       initialProductStatuses[ptId] = SubmissionStatus.RECEIVED;
+    }
+
+    // Resolver universidad de cada autor (find-or-create si viene solo el nombre)
+    for (const author of dto.authors ?? []) {
+      author.universityId = await this.resolveUniversityId(
+        author.universityId, author.universityName, author.countryId,
+      );
+    }
+
+    // Estudiantes de la institución sede (ej. UMAYOR) deben indicar facultad
+    // y postular tanto Ponencia como Capítulo de Libro.
+    const hostStudentAuthors: typeof dto.authors = [];
+    for (const author of dto.authors ?? []) {
+      if (author.participantType !== ParticipantType.STUDENT || !author.universityId) continue;
+      const university = await this.universitiesService.findOne(author.universityId);
+      if (university.isHostInstitution) hostStudentAuthors.push(author);
+    }
+    if (hostStudentAuthors.length) {
+      const missingFaculty = hostStudentAuthors.find((a) => !a.facultyId);
+      if (missingFaculty) {
+        throw new BadRequestException(
+          `La facultad es requerida para ${missingFaculty.fullName} (estudiante de la institución sede)`,
+        );
+      }
+      const selectedTypes = await this.productTypeRepo.findBy({ id: In(allProductTypeIds) });
+      const hasPonencia = selectedTypes.some((pt) => {
+        const n = pt.name.toLowerCase();
+        return n.includes('ponencia') || n.includes('comunicaci');
+      });
+      const hasBookChapter = selectedTypes.some((pt) => {
+        const n = pt.name.toLowerCase();
+        return n.includes('cap') && n.includes('libro');
+      });
+      if (!hasPonencia || !hasBookChapter) {
+        throw new BadRequestException(
+          'Los estudiantes de la institución sede deben postular tanto Ponencia / Comunicación Oral como Capítulo de Libro',
+        );
+      }
     }
 
     // Guardar submission en BD
@@ -355,7 +408,11 @@ export class SubmissionsService implements OnModuleInit {
               fullName:          author.fullName,
               email:             author.email.toLowerCase().trim(),
               academicTitle:     author.academicTitle,
+              participantType:   author.participantType,
               affiliation:       author.affiliation,
+              universityId:      author.universityId,
+              facultyId:         author.facultyId,
+              researchGroupId:   author.researchGroupId,
               orcid:             author.orcid,
               phone:             author.phone,
               countryId:         author.countryId,
@@ -426,6 +483,9 @@ export class SubmissionsService implements OnModuleInit {
       .leftJoinAndSelect('s.productType', 'pt')
       .leftJoinAndSelect('s.authors', 'authors')
       .leftJoinAndSelect('authors.country', 'authorCountry')
+      .leftJoinAndSelect('authors.university', 'authorUniversity')
+      .leftJoinAndSelect('authors.faculty', 'authorFaculty')
+      .leftJoinAndSelect('authors.researchGroup', 'authorResearchGroup')
       .leftJoinAndSelect('s.country', 'country')
       .orderBy('s.createdAt', 'DESC');
 
@@ -993,12 +1053,18 @@ export class SubmissionsService implements OnModuleInit {
 
     const nextOrder = (submission.authors ?? []).reduce((max, a) => Math.max(max, a.authorOrder), -1) + 1;
 
+    const universityId = await this.resolveUniversityId(dto.universityId, dto.universityName, dto.countryId);
+
     // Crear o encontrar person
     const person = await this.personsService.findOrCreate({
       fullName:          dto.fullName,
       email:             dto.email.toLowerCase().trim(),
       academicTitle:     dto.academicTitle,
+      participantType:   dto.participantType,
       affiliation:       dto.affiliation,
+      universityId,
+      facultyId:         dto.facultyId,
+      researchGroupId:   dto.researchGroupId,
       orcid:             dto.orcid,
       phone:             dto.phone,
       countryId:         dto.countryId,
@@ -1013,7 +1079,11 @@ export class SubmissionsService implements OnModuleInit {
       fullName:          dto.fullName,
       email:             dto.email.toLowerCase().trim(),
       academicTitle:     dto.academicTitle ?? '',
+      participantType:   dto.participantType,
       affiliation:       dto.affiliation,
+      universityId,
+      facultyId:         dto.facultyId,
+      researchGroupId:   dto.researchGroupId,
       emailType:         dto.emailType ?? 'personal',
       orcid:             dto.orcid,
       phone:             dto.phone,
@@ -1063,10 +1133,18 @@ export class SubmissionsService implements OnModuleInit {
     const author = await this.authorRepo.findOne({ where: { id: authorId } });
     if (!author) throw new NotFoundException('Autor no encontrado');
 
+    const universityId = await this.resolveUniversityId(
+      dto.universityId, dto.universityName, dto.countryId ?? author.countryId,
+    );
+
     Object.assign(author, {
       fullName:          dto.fullName          ?? author.fullName,
       academicTitle:     dto.academicTitle     ?? author.academicTitle,
+      participantType:   dto.participantType   ?? author.participantType,
       affiliation:       dto.affiliation       ?? author.affiliation,
+      universityId:      universityId          ?? author.universityId,
+      facultyId:         dto.facultyId         ?? author.facultyId,
+      researchGroupId:   dto.researchGroupId   ?? author.researchGroupId,
       emailType:         dto.emailType         ?? author.emailType,
       email:             dto.email             ? dto.email.toLowerCase().trim() : author.email,
       orcid:             dto.orcid             ?? author.orcid,
@@ -1087,7 +1165,11 @@ export class SubmissionsService implements OnModuleInit {
       await this.personsService.update(author.personId, {
         fullName:          dto.fullName,
         academicTitle:     dto.academicTitle,
+        participantType:   dto.participantType,
         affiliation:       dto.affiliation,
+        universityId,
+        facultyId:         dto.facultyId,
+        researchGroupId:   dto.researchGroupId,
         orcid:             dto.orcid,
         phone:             dto.phone,
         countryId:         dto.countryId,

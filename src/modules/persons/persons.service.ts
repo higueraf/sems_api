@@ -3,12 +3,18 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike, Or } from 'typeorm';
 import { Person } from '../../entities/person.entity';
 import { SubmissionAuthor } from '../../entities/submission-author.entity';
+import { ParticipantType } from '../../common/enums/participant-type.enum';
 
 export interface PersonDto {
   fullName: string;
   email: string;
   academicTitle?: string;
+  participantType?: ParticipantType;
+  /** @deprecated Reemplazado por universityId. */
   affiliation?: string;
+  universityId?: string;
+  facultyId?: string;
+  researchGroupId?: string;
   orcid?: string;
   phone?: string;
   countryId?: string;
@@ -93,7 +99,11 @@ export class PersonsService {
     const updatable: Partial<SubmissionAuthor> = {};
     if (dto.fullName !== undefined)          updatable.fullName = dto.fullName;
     if (dto.academicTitle !== undefined)     updatable.academicTitle = dto.academicTitle;
+    if (dto.participantType !== undefined)   updatable.participantType = dto.participantType;
     if (dto.affiliation !== undefined)       updatable.affiliation = dto.affiliation;
+    if (dto.universityId !== undefined)      updatable.universityId = dto.universityId;
+    if (dto.facultyId !== undefined)         updatable.facultyId = dto.facultyId;
+    if (dto.researchGroupId !== undefined)   updatable.researchGroupId = dto.researchGroupId;
     if (dto.orcid !== undefined)             updatable.orcid = dto.orcid;
     if (dto.phone !== undefined)             updatable.phone = dto.phone;
     if (dto.countryId !== undefined)         updatable.countryId = dto.countryId;

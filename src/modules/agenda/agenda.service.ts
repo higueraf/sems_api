@@ -442,7 +442,7 @@ async function buildAgendaPdf(slots: AgendaSlot[], eventName: string): Promise<B
           ?? slot.submission?.authors?.[0];
         const rawSpeaker = slot.speakerName || (auth as any)?.fullName || '';
         const speaker    = rawSpeaker.replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-        const affil      = stripHtml(slot.speakerAffiliation || (auth as any)?.affiliation || '');
+        const affil      = stripHtml(slot.speakerAffiliation || (auth as any)?.university?.name || (auth as any)?.affiliation || '');
         // Strip HTML, normalize whitespace, truncate to prevent inflated row heights
         const titleRaw  = stripHtml(slot.submission?.titleEs || slot.title || '');
         const title     = titleRaw.length > 220 ? titleRaw.slice(0, 217) + '…' : titleRaw;

@@ -61,10 +61,9 @@ export class SubmissionsController {
   ) {}
 
   // ════════════════════════════════════════════════════════════════════════════
-  // PÚBLICO — Crear postulación
+  // Crear postulación — requiere sesión (autor de correspondencia autenticado)
   // ════════════════════════════════════════════════════════════════════════════
 
-  @Public()
   @Post()
   @UseInterceptors(
     AnyFilesInterceptor({

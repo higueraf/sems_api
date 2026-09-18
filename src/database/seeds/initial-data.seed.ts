@@ -160,18 +160,18 @@ export async function seed(dataSource: DataSource) {
   }
   console.log('✅ Scientific product types seeded');
 
-  // ─── Event: II Simposio Internacional de Ciencia Abierta 2026 ─────────────
+  // ─── Event: III Simposio Internacional de Ciencia Abierta 2026 ────────────
   let event = await eventRepo.findOne({
-    where: { name: 'II Simposio Internacional de Ciencia Abierta 2026' },
+    where: { name: 'III Simposio Internacional de Ciencia Abierta 2026' },
   });
 
   if (!event) {
     event = await eventRepo.save(
       eventRepo.create({
-        name: 'II Simposio Internacional de Ciencia Abierta 2026',
-        edition: 'II',
+        name: 'III Simposio Internacional de Ciencia Abierta 2026',
+        edition: 'III',
         tagline: 'Innovación para Transformar el Conocimiento en Sociedad',
-        description: `El II Simposio Internacional de Ciencia Abierta 2026 es un espacio académico internacional de carácter híbrido que busca promover la integración académica internacional para fortalecer la ciencia abierta, la innovación digital y la democratización del conocimiento como motor de transformación social.
+        description: `El III Simposio Internacional de Ciencia Abierta 2026 es un espacio académico internacional de carácter híbrido que busca promover la integración académica internacional para fortalecer la ciencia abierta, la innovación digital y la democratización del conocimiento como motor de transformación social.
 
 Con una duración de 80 horas académicas certificadas, el simposio reúne a investigadores, docentes, estudiantes y profesionales de diversas disciplinas para compartir avances científicos, experiencias de innovación y reflexiones sobre el impacto del conocimiento en la sociedad.
 
@@ -541,7 +541,7 @@ El evento se realizará del 18 al 22 de mayo de 2026 en la Institución Universi
   const sectionsData = [
     {
       sectionKey: 'hero',
-      title: 'II Simposio Internacional de Ciencia Abierta 2026',
+      title: 'III Simposio Internacional de Ciencia Abierta 2026',
       content: 'Innovación para Transformar el Conocimiento en Sociedad',
       metadata: {
         subtitle: '18 - 22 de mayo de 2026 | Cartagena de Indias, Colombia',
@@ -556,7 +556,7 @@ El evento se realizará del 18 al 22 de mayo de 2026 en la Institución Universi
     {
       sectionKey: 'about',
       title: 'Sobre el Simposio',
-      content: `El II Simposio Internacional de Ciencia Abierta 2026 es un espacio académico internacional que busca promover la integración académica para fortalecer la ciencia abierta, la innovación digital y la democratización del conocimiento como motor de transformación social.
+      content: `El III Simposio Internacional de Ciencia Abierta 2026 es un espacio académico internacional que busca promover la integración académica para fortalecer la ciencia abierta, la innovación digital y la democratización del conocimiento como motor de transformación social.
 
 El evento reúne a investigadores, docentes, estudiantes y profesionales de diversas disciplinas para compartir avances científicos, experiencias de innovación y reflexiones sobre el impacto del conocimiento en la sociedad.`,
       metadata: {

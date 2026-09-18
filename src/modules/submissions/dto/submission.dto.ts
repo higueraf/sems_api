@@ -1,9 +1,10 @@
 import {
   IsString, IsOptional, IsBoolean, IsEmail, IsArray, ValidateNested,
   IsUUID, ArrayMinSize, ArrayMaxSize, MaxLength, IsNumber, IsNotEmpty,
-  IsUrl, Matches,
+  IsUrl, Matches, IsEnum,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
+import { ParticipantType } from '../../../common/enums/participant-type.enum';
 
 export class SubmissionAuthorDto {
   @IsString()
@@ -15,9 +16,32 @@ export class SubmissionAuthorDto {
   @IsNotEmpty({ message: 'El título académico es requerido' })
   academicTitle: string;
 
+  @IsEnum(ParticipantType, { message: 'El rol de participación es requerido' })
+  participantType: ParticipantType;
+
+  /** @deprecated Reemplazado por universityId/universityName. */
   @IsString()
   @IsOptional()
   affiliation?: string;
+
+  @IsUUID()
+  @IsOptional()
+  universityId?: string;
+
+  /** Nombre de una universidad que no está en el catálogo: se crea (find-or-create) junto a countryId. */
+  @IsString()
+  @IsOptional()
+  universityName?: string;
+
+  /** Solo si participantType=estudiante y la universidad es la institución sede (ej. UMAYOR). */
+  @IsUUID()
+  @IsOptional()
+  facultyId?: string;
+
+  /** Solo si el estudiante pertenece a un semillero de investigación. */
+  @IsUUID()
+  @IsOptional()
+  researchGroupId?: string;
 
   // Tipo de correo: 'institutional' | 'personal'
   @IsString()
@@ -167,9 +191,30 @@ export class AdminAuthorDto {
   @IsOptional()
   academicTitle?: string;
 
+  @IsEnum(ParticipantType)
+  @IsOptional()
+  participantType?: ParticipantType;
+
+  /** @deprecated Reemplazado por universityId/universityName. */
   @IsString()
   @IsOptional()
   affiliation?: string;
+
+  @IsUUID()
+  @IsOptional()
+  universityId?: string;
+
+  @IsString()
+  @IsOptional()
+  universityName?: string;
+
+  @IsUUID()
+  @IsOptional()
+  facultyId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  researchGroupId?: string;
 
   @IsString()
   @IsOptional()

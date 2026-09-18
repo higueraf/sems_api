@@ -3,7 +3,11 @@ import {
   JoinColumn, CreateDateColumn, UpdateDateColumn, OneToOne,
 } from 'typeorm';
 import { Country } from './country.entity';
+import { University } from './university.entity';
+import { Faculty } from './faculty.entity';
+import { ResearchGroup } from './research-group.entity';
 import { User } from './user.entity';
+import { ParticipantType } from '../common/enums/participant-type.enum';
 
 /**
  * Registro global de autores/personas.
@@ -24,8 +28,33 @@ export class Person {
   @Column({ nullable: true })
   academicTitle: string;
 
+  @Column({ type: 'enum', enum: ParticipantType, nullable: true })
+  participantType: ParticipantType;
+
+  /** @deprecated Reemplazado por university/universityId. Se conserva solo para registros históricos. */
   @Column({ nullable: true })
   affiliation: string;
+
+  @ManyToOne(() => University, { eager: true, nullable: true })
+  @JoinColumn({ name: 'universityId' })
+  university: University;
+
+  @Column({ nullable: true })
+  universityId: string;
+
+  @ManyToOne(() => Faculty, { eager: true, nullable: true })
+  @JoinColumn({ name: 'facultyId' })
+  faculty: Faculty;
+
+  @Column({ nullable: true })
+  facultyId: string;
+
+  @ManyToOne(() => ResearchGroup, { eager: true, nullable: true })
+  @JoinColumn({ name: 'researchGroupId' })
+  researchGroup: ResearchGroup;
+
+  @Column({ nullable: true })
+  researchGroupId: string;
 
   @Column({ nullable: true })
   orcid: string;

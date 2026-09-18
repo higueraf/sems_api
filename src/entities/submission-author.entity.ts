@@ -4,7 +4,11 @@ import {
 } from 'typeorm';
 import { Submission } from './submission.entity';
 import { Country } from './country.entity';
+import { University } from './university.entity';
+import { Faculty } from './faculty.entity';
+import { ResearchGroup } from './research-group.entity';
 import { Person } from './person.entity';
+import { ParticipantType } from '../common/enums/participant-type.enum';
 
 export enum AcademicTitle {
   STUDENT      = 'Estudiante',
@@ -43,8 +47,36 @@ export class SubmissionAuthor {
   @Column({ nullable: true })
   academicTitle: string;
 
+  /** Rol de participación (profesor / estudiante / profesional graduado). */
+  @Column({ type: 'enum', enum: ParticipantType, nullable: true })
+  participantType: ParticipantType;
+
+  /** @deprecated Reemplazado por university/universityId. Se conserva solo para registros históricos. */
   @Column({ nullable: true })
   affiliation: string;
+
+  @ManyToOne(() => University, { eager: true, nullable: true })
+  @JoinColumn({ name: 'universityId' })
+  university: University;
+
+  @Column({ nullable: true })
+  universityId: string;
+
+  /** Solo para estudiantes de la institución sede (ej. UMAYOR). */
+  @ManyToOne(() => Faculty, { eager: true, nullable: true })
+  @JoinColumn({ name: 'facultyId' })
+  faculty: Faculty;
+
+  @Column({ nullable: true })
+  facultyId: string;
+
+  /** Semillero de investigación al que pertenece (opcional, solo estudiantes). */
+  @ManyToOne(() => ResearchGroup, { eager: true, nullable: true })
+  @JoinColumn({ name: 'researchGroupId' })
+  researchGroup: ResearchGroup;
+
+  @Column({ nullable: true })
+  researchGroupId: string;
 
   // Tipo de correo: institutional | personal
   @Column({ nullable: true })

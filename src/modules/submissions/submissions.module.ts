@@ -11,6 +11,7 @@ import { User } from '../../entities/user.entity';
 import { Certificate } from '../../entities/certificate.entity';
 import { Person } from '../../entities/person.entity';
 import { PersonsModule } from '../persons/persons.module';
+import { UniversitiesModule } from '../universities/universities.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { PersonsModule } from '../persons/persons.module';
       Person,
     ]),
     PersonsModule,
+    UniversitiesModule,
   ],
   controllers: [SubmissionsController],
   providers: [SubmissionsService],

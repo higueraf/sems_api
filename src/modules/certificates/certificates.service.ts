@@ -10,7 +10,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { Certificate } from '../../entities/certificate.entity';
+import { Certificate, CertificateType } from '../../entities/certificate.entity';
 import { Submission } from '../../entities/submission.entity';
 import { SubmissionAuthor } from '../../entities/submission-author.entity';
 import { ScientificProductType } from '../../entities/scientific-product-type.entity';
@@ -24,7 +24,7 @@ import { StorageService } from '../storage/storage.service';
 import { MailService } from '../mail/mail.service';
 import { User } from '../../entities/user.entity';
 import {
-  GenerateCertificatesDto, BulkGenerateAndSendDto, CertificateFiltersDto,
+  GenerateCertificatesDto, BulkGenerateAndSendDto, CertificateFiltersDto, GeneratePeerReviewerCertificateDto,
 } from './dto/certificate.dto';
 import { ConfigService } from '@nestjs/config';
 
@@ -50,6 +50,9 @@ interface PdfOpts {
   allAuthors?: string;
   createdAt?: Date;
   isbnCode?: string;
+  /** Overrides opcionales para certificados que no son de autor (ej. par académico) */
+  roleLabel?: string;
+  descriptionText?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,7 +174,7 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
     const ptLower = (opts.productTypeName || '').toLowerCase();
     const isPonencia    = ptLower.includes('ponencia') || ptLower.includes('comunicaci');
     const isBookChapter = ptLower.includes('cap') && ptLower.includes('libro');
-    const rolLabel = isPonencia ? 'PONENTE' : 'AUTOR/A';
+    const rolLabel = opts.roleLabel ?? (isPonencia ? 'PONENTE' : 'AUTOR/A');
 
     const rolY = afterAuthorY + 15;
     doc.font('Helvetica').fontSize(12).fillColor('#555555')
@@ -182,18 +185,20 @@ async function buildDiplomaPdf(opts: PdfOpts): Promise<Buffer> {
       .text(rolLabel, CX, labelY, { width: CW, align: 'center' });
 
     // Texto descriptivo
-    const descText = isBookChapter
+    const descText = opts.descriptionText ?? (isBookChapter
       ? 'por la publicación del capítulo de libro titulado:'
-      : 'por su participación con la producción científica titulada:';
+      : 'por su participación con la producción científica titulada:');
     const descY = labelY + 28;
     doc.font('Helvetica').fontSize(12).fillColor('#555555')
       .text(descText, CX, descY, { width: CW, align: 'center' });
 
-    // Título
-    const titleY = descY + 25;
-    const shortTitle = opts.titleEs.length > 150 ? opts.titleEs.substring(0, 150) + '…' : opts.titleEs;
-    doc.font('Helvetica-BoldOblique').fontSize(15).fillColor(G3)
-      .text(`”${shortTitle}”`, CX + 20, titleY, { width: CW - 40, align: 'center' });
+    // Título (omitido si no aplica, ej. certificados de par académico)
+    if (opts.titleEs) {
+      const titleY = descY + 25;
+      const shortTitle = opts.titleEs.length > 150 ? opts.titleEs.substring(0, 150) + '…' : opts.titleEs;
+      doc.font('Helvetica-BoldOblique').fontSize(15).fillColor(G3)
+        .text(`”${shortTitle}”`, CX + 20, titleY, { width: CW - 40, align: 'center' });
+    }
 
     // ISBN — solo para capítulo de libro
     if (isBookChapter && opts.isbnCode) {
@@ -521,6 +526,7 @@ export class CertificatesService {
     @InjectRepository(OrganizerMember)     private memberRepo: Repository<OrganizerMember>,
     @InjectRepository(Event)               private eventRepo: Repository<Event>,
     @InjectRepository(SubmissionStatusHistory) private historyRepo: Repository<SubmissionStatusHistory>,
+    @InjectRepository(User)                private userRepo: Repository<User>,
     private readonly storage: StorageService,
     private readonly mailService: MailService,
     private readonly dataSource: DataSource,
@@ -730,7 +736,7 @@ export class CertificatesService {
           titleEs:          submission.titleEs,
           productTypeName:  productType?.name ?? 'Producción Científica',
           thematicAxisName: submission.thematicAxis?.name ?? '',
-          eventName:        event?.name ?? 'Simposio',
+          eventName:        event?.name ?? 'III Simposio Internacional de Ciencia Abierta 2026',
           eventDates,
           eventCity:        event?.city ?? event?.location ?? '',
           certificateNumber: certNumber,
@@ -790,6 +796,204 @@ export class CertificatesService {
     return created;
   }
 
+  // ── Certificado de Par Académico (evaluador) ─────────────────────────────────
+  // Generación manual desde el panel de certificados: el admin elige un
+  // evaluador + evento y se genera + envía en un solo paso.
+
+  async generateAndSendPeerReviewerCertificate(
+    dto: GeneratePeerReviewerCertificateDto,
+    user: User,
+  ): Promise<{ generated: number; sent: number; failed: number }> {
+    const { submissionId } = dto;
+
+    const submission = await this.submissionRepo.findOne({ where: { id: submissionId }, relations: ['productType'] });
+    if (!submission) throw new NotFoundException('Postulación no encontrada');
+
+    const ptNameLower = (submission.productType?.name ?? '').toLowerCase();
+    const isBookChapter = ptNameLower.includes('cap') && ptNameLower.includes('libro');
+    if (!isBookChapter) {
+      throw new BadRequestException(
+        'El certificado de par académico solo aplica a postulaciones de tipo Capítulo de Libro',
+      );
+    }
+
+    const evaluatorId = submission.assignedEvaluatorId;
+    if (!evaluatorId) {
+      throw new BadRequestException('Esta postulación no tiene un evaluador asignado');
+    }
+
+    const evaluator = await this.userRepo.findOne({ where: { id: evaluatorId } });
+    if (!evaluator) throw new NotFoundException('Evaluador no encontrado');
+
+    const eventId = submission.eventId;
+    const event = await this.eventRepo.findOne({ where: { id: eventId } });
+    if (!event) throw new NotFoundException('Evento no encontrado');
+
+    const [organizerLogos, headerLogoBuffer, signatories] = await Promise.all([
+      this.getOrganizerLogos(eventId),
+      this.getHeaderLogo(eventId),
+      this.getSignatories(eventId),
+    ]);
+
+    const appUrl = (this.config.get<string>('frontendUrl') || 'http://localhost:5173')
+      .split(',').map(u => u.trim()).find(u => u.startsWith('https://')) ?? 'http://localhost:5173';
+
+    let existing = await this.certRepo.findOne({
+      where: { evaluatorId, submissionId, certificateType: CertificateType.PEER_REVIEWER },
+    });
+
+    const certNumber       = existing?.certificateNumber ?? await this.generateCertificateNumber(eventId);
+    const verificationCode = existing?.verificationCode ?? uuidv4().replace(/-/g, '').substring(0, 12).toUpperCase();
+    const verificationUrl  = `${appUrl}/certificado/${verificationCode}`;
+    const eventDates       = this.formatEventDates(event);
+
+    let qrBuffer: Buffer | undefined;
+    try {
+      qrBuffer = await QRCode.toBuffer(verificationUrl, {
+        type: 'png', width: 200, margin: 1,
+        color: { dark: '#003918', light: '#ffffff' },
+      });
+    } catch (err) {
+      this.logger.warn(`No se pudo generar QR para ${verificationCode}: ${err.message}`);
+    }
+
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await buildCertificatePdf({
+        authorName:       evaluator.fullName,
+        isMainAuthor:     true,
+        titleEs:          submission.titleEs,
+        productTypeName:  'Certificado de Par Académico',
+        thematicAxisName: '',
+        eventName:        event.name,
+        eventDates,
+        eventCity:        event.city ?? event.location ?? '',
+        certificateNumber: certNumber,
+        verificationUrl,
+        headerLogoBuffer,
+        signatories,
+        organizerLogoBuffers: organizerLogos,
+        qrBuffer,
+        roleLabel:        'PAR ACADÉMICO',
+        descriptionText:  'por su valiosa colaboración como evaluador/a en la revisión académica del capítulo de libro titulado:',
+      }, 'diploma');
+    } catch (err) {
+      this.logger.error(`Error generando PDF de certificado de par académico: ${err.message}`);
+      throw new BadRequestException('Error al generar el PDF del certificado');
+    }
+
+    const sanitizedName = evaluator.fullName.replace(/\s+/g, '-');
+    const fileName = `${certNumber}-${sanitizedName}-par-academico.pdf`;
+    let fileUrl = '';
+    try {
+      fileUrl = await this.storage.upload(
+        { buffer: pdfBuffer, originalname: fileName, mimetype: 'application/pdf', size: pdfBuffer.length } as any,
+        'guidelines',
+        `cert-${verificationCode}-par-academico`,
+      );
+    } catch (err) {
+      this.logger.error(`Error subiendo PDF de certificado de par académico: ${err.message}`);
+    }
+
+    let cert: Certificate;
+    if (existing) {
+      existing.fileUrl     = fileUrl;
+      existing.fileName    = fileName;
+      existing.emailSentAt = null as any;
+      cert = await this.certRepo.save(existing);
+      this.logger.log(`📜 Certificado de par académico ${certNumber} REGENERADO para ${evaluator.fullName}`);
+    } else {
+      cert = await this.certRepo.save(this.certRepo.create({
+        certificateType:  CertificateType.PEER_REVIEWER,
+        certificateNumber: certNumber,
+        submissionId,
+        authorId:         null,
+        evaluatorId,
+        productTypeName:  'Certificado de Par Académico',
+        verificationCode,
+        fileUrl,
+        fileName,
+        issuedAt:         new Date(),
+        eventId,
+      }));
+      this.logger.log(`📜 Certificado de par académico ${certNumber} generado para ${evaluator.fullName}`);
+    }
+
+    const html = this.buildPeerReviewerCertificateEmailHtml(
+      evaluator.fullName, certNumber, verificationUrl, event, submission.titleEs,
+    );
+
+    let sent = 0, failed = 0;
+    const ok = await this.mailService.sendCertificateEmail(
+      evaluator.email,
+      evaluator.fullName,
+      `Certificado de Par Académico — ${certNumber}`,
+      html,
+      undefined,
+      user.id,
+      [{ buffer: pdfBuffer, fileName }],
+    ).catch(() => false);
+
+    if (ok) {
+      cert.emailSentAt = new Date();
+      await this.certRepo.save(cert);
+      sent = 1;
+    } else {
+      failed = 1;
+    }
+
+    return { generated: 1, sent, failed };
+  }
+
+  private buildPeerReviewerCertificateEmailHtml(
+    evaluatorName: string,
+    certificateNumber: string,
+    verificationUrl: string,
+    event: Event,
+    submissionTitle?: string,
+  ): string {
+    const eventName = event?.name ?? 'III Simposio Internacional de Ciencia Abierta 2026';
+    const eventYear  = event?.startDate ? new Date(event.startDate).getFullYear() : new Date().getFullYear();
+    const year = new Date().getFullYear();
+    return `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>Certificado de Par Académico</title></head>
+<body style="margin:0;padding:0;background-color:#f0f4f1;font-family:Arial,Helvetica,sans-serif;">
+  <div style="background-color:#f0f4f1;padding:20px 0;">
+    <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.1);">
+      <div style="background-color:#003918;padding:20px 30px;color:white;">
+        <div style="font-size:11px;color:#7ee8a2;text-transform:uppercase;margin-bottom:5px;">${eventName}</div>
+        <h1 style="margin:0;font-size:22px;font-weight:bold;">Certificado de Par Académico</h1>
+        <p style="margin:5px 0 0;font-size:13px;color:#a7f3d0;">Documento oficial del evento</p>
+      </div>
+      <div style="padding:30px;">
+        <p style="color:#374840;font-size:15px;">Estimado/a <strong>${evaluatorName}</strong>,</p>
+        <p style="color:#374840;font-size:14px;line-height:1.6;">
+          Le agradecemos su valiosa colaboración como <strong>evaluador/a</strong> en la revisión del capítulo de libro
+          ${submissionTitle ? `titulado <strong>«${submissionTitle}»</strong>` : ''} en el
+          <strong>${eventName} ${eventYear}</strong>. Adjuntamos su certificado oficial de participación.
+        </p>
+        <div style="background:#f0f9f4;border-left:4px solid #003918;padding:16px;margin:20px 0;border-radius:4px;">
+          <p style="margin:0 0 6px;font-size:12px;color:#6b7280;text-transform:uppercase;font-weight:bold;">N° de Certificado</p>
+          <p style="margin:0;font-size:16px;color:#003918;font-weight:bold;font-family:monospace;">${certificateNumber}</p>
+        </div>
+        <p style="color:#374840;font-size:14px;">El certificado en formato PDF se adjunta a este correo. También puede verificar su autenticidad en línea:</p>
+        <div style="text-align:center;margin:24px 0;">
+          <a href="${verificationUrl}" style="background-color:#003918;color:white;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px;">
+            Verificar Certificado
+          </a>
+        </div>
+        <p style="color:#374840;font-size:13px;">URL de verificación: <a href="${verificationUrl}" style="color:#007F3A;">${verificationUrl}</a></p>
+      </div>
+      <div style="background:#f0f4f1;padding:16px 30px;text-align:center;font-size:11px;color:#6b7280;">
+        © ${year} ${eventName}. Todos los derechos reservados.
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
   // ── Regenerar y reenviar un único certificado ────────────────────────────────
 
   async regenerateAndSendOne(certId: string, user: User): Promise<{ generated: number; sent: number; failed: number }> {
@@ -798,6 +1002,10 @@ export class CertificatesService {
       relations: ['author'],
     });
     if (!cert) throw new NotFoundException('Certificado no encontrado');
+
+    if (cert.certificateType === CertificateType.PEER_REVIEWER) {
+      return this.generateAndSendPeerReviewerCertificate({ submissionId: cert.submissionId }, user);
+    }
 
     const submission = await this.submissionRepo.findOne({
       where: { id: cert.submissionId },
@@ -848,7 +1056,7 @@ export class CertificatesService {
         titleEs:          submission.titleEs,
         productTypeName:  productType?.name ?? 'Producción Científica',
         thematicAxisName: submission.thematicAxis?.name ?? '',
-        eventName:        event?.name ?? 'Simposio',
+        eventName:        event?.name ?? 'III Simposio Internacional de Ciencia Abierta 2026',
         eventDates,
         eventCity:        event?.city ?? event?.location ?? '',
         certificateNumber: cert.certificateNumber,
@@ -1066,11 +1274,13 @@ export class CertificatesService {
       .leftJoinAndSelect('c.author', 'author')
       .leftJoinAndSelect('c.submission', 'sub')
       .leftJoinAndSelect('c.productType', 'pt')
+      .leftJoinAndSelect('c.evaluator', 'evaluator')
       .orderBy('c.issuedAt', 'DESC');
 
-    if (filters.eventId)       qb.andWhere('c.eventId = :eid',           { eid: filters.eventId });
-    if (filters.productTypeId) qb.andWhere('c.productTypeId = :ptId',    { ptId: filters.productTypeId });
-    if (filters.submissionId)  qb.andWhere('c.submissionId = :sid',      { sid: filters.submissionId });
+    if (filters.eventId)         qb.andWhere('c.eventId = :eid',           { eid: filters.eventId });
+    if (filters.productTypeId)   qb.andWhere('c.productTypeId = :ptId',    { ptId: filters.productTypeId });
+    if (filters.submissionId)    qb.andWhere('c.submissionId = :sid',      { sid: filters.submissionId });
+    if (filters.certificateType) qb.andWhere('c.certificateType = :ctype', { ctype: filters.certificateType });
     if (filters.sent === 'true')  qb.andWhere('c.emailSentAt IS NOT NULL');
     if (filters.sent === 'false') qb.andWhere('c.emailSentAt IS NULL');
 
@@ -1120,16 +1330,30 @@ export class CertificatesService {
   async verify(verificationCode: string) {
     const cert = await this.certRepo.findOne({
       where: { verificationCode },
-      relations: ['author', 'submission', 'submission.event', 'productType'],
+      relations: ['author', 'submission', 'submission.event', 'productType', 'evaluator', 'event'],
     });
     if (!cert) throw new NotFoundException('Certificado no encontrado');
+
+    if (cert.certificateType === CertificateType.PEER_REVIEWER) {
+      return {
+        valid:             true,
+        certificateNumber: cert.certificateNumber,
+        authorName:        cert.evaluator?.fullName ?? '',
+        titleEs:           cert.submission?.titleEs ?? '',
+        productTypeName:   cert.productTypeName ?? 'Certificado de Par Académico',
+        eventName:         cert.event?.name ?? cert.submission?.event?.name ?? '',
+        issuedAt:          cert.issuedAt,
+        emailSentAt:       cert.emailSentAt,
+      };
+    }
+
     return {
       valid:             true,
       certificateNumber: cert.certificateNumber,
-      authorName:        cert.author.fullName,
-      titleEs:           cert.submission.titleEs,
+      authorName:        cert.author?.fullName ?? '',
+      titleEs:           cert.submission?.titleEs ?? '',
       productTypeName:   cert.productTypeName,
-      eventName:         cert.submission.event?.name ?? '',
+      eventName:         cert.submission?.event?.name ?? '',
       issuedAt:          cert.issuedAt,
       emailSentAt:       cert.emailSentAt,
     };
@@ -1165,7 +1389,7 @@ export class CertificatesService {
     verificationUrl: string,
     event: Event | null,
   ): string {
-    const eventName = event?.name ?? 'Simposio';
+    const eventName = event?.name ?? 'III Simposio Internacional de Ciencia Abierta 2026';
     const eventYear  = event?.startDate ? new Date(event.startDate).getFullYear() : new Date().getFullYear();
     const year = new Date().getFullYear();
     const shortTitle = titleEs.length > 80 ? titleEs.substring(0, 80) + '...' : titleEs;

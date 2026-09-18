@@ -2,6 +2,8 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
+  ManyToOne,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
   BeforeInsert,
@@ -9,6 +11,7 @@ import {
 } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { UserRole } from '../common/enums/role.enum';
+import { University } from './university.entity';
 
 @Entity('users')
 export class User {
@@ -35,6 +38,14 @@ export class User {
 
   @Column({ nullable: true })
   lastLoginAt: Date;
+
+  /** Universidad del evaluador/par académico (opcional). */
+  @ManyToOne(() => University, { eager: true, nullable: true })
+  @JoinColumn({ name: 'universityId' })
+  university: University;
+
+  @Column({ nullable: true })
+  universityId: string;
 
   @CreateDateColumn()
   createdAt: Date;

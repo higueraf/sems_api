@@ -5,29 +5,48 @@ import {
 import { Submission } from './submission.entity';
 import { SubmissionAuthor } from './submission-author.entity';
 import { ScientificProductType } from './scientific-product-type.entity';
+import { Event } from './event.entity';
+import { User } from './user.entity';
+
+export enum CertificateType {
+  AUTHOR = 'author',
+  PEER_REVIEWER = 'peer_reviewer',
+}
 
 @Entity('certificates')
 export class Certificate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /** Tipo de certificado: de autor (producción científica) o de par académico (evaluador) */
+  @Column({ type: 'enum', enum: CertificateType, default: CertificateType.AUTHOR })
+  certificateType: CertificateType;
+
   /** Número correlativo único, formato CERT-YYYY-NNNN */
   @Column({ unique: true })
   certificateNumber: string;
 
-  @ManyToOne(() => Submission, { onDelete: 'CASCADE', eager: false })
+  @ManyToOne(() => Submission, { onDelete: 'CASCADE', eager: false, nullable: true })
   @JoinColumn({ name: 'submissionId' })
-  submission: Submission;
+  submission: Submission | null;
 
-  @Column()
-  submissionId: string;
+  @Column({ nullable: true })
+  submissionId: string | null;
 
-  @ManyToOne(() => SubmissionAuthor, { onDelete: 'CASCADE', eager: true })
+  @ManyToOne(() => SubmissionAuthor, { onDelete: 'CASCADE', eager: true, nullable: true })
   @JoinColumn({ name: 'authorId' })
-  author: SubmissionAuthor;
+  author: SubmissionAuthor | null;
 
-  @Column()
-  authorId: string;
+  @Column({ nullable: true })
+  authorId: string | null;
+
+  /** Usuario evaluador, solo para certificados de tipo "par académico" */
+  @ManyToOne(() => User, { onDelete: 'CASCADE', eager: false, nullable: true })
+  @JoinColumn({ name: 'evaluatorId' })
+  evaluator: User | null;
+
+  @Column({ nullable: true })
+  evaluatorId: string | null;
 
   @ManyToOne(() => ScientificProductType, { eager: true, nullable: true })
   @JoinColumn({ name: 'productTypeId' })
@@ -65,6 +84,10 @@ export class Certificate {
   /** Fecha en que se envió el correo (null = pendiente) */
   @Column({ nullable: true, type: 'timestamptz' })
   emailSentAt: Date;
+
+  @ManyToOne(() => Event, { nullable: true, eager: false })
+  @JoinColumn({ name: 'eventId' })
+  event: Event | null;
 
   /** ID del evento al que pertenece (para filtros eficientes) */
   @Column({ nullable: true })

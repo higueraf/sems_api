@@ -10,6 +10,7 @@ import { Organizer } from '../../entities/organizer.entity';
 import { OrganizerMember } from '../../entities/organizer-member.entity';
 import { Event } from '../../entities/event.entity';
 import { SubmissionStatusHistory } from '../../entities/submission-status-history.entity';
+import { User } from '../../entities/user.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
@@ -21,6 +22,7 @@ import { SubmissionStatusHistory } from '../../entities/submission-status-histor
     OrganizerMember,
     Event,
     SubmissionStatusHistory,
+    User,
   ])],
   controllers: [CertificatesController],
   providers: [CertificatesService],
