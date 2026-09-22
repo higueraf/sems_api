@@ -932,10 +932,12 @@ export class CertificatesService {
           }));
           break;
         } catch (err: any) {
-          const isDuplicateCertNumber = err?.code === '23505' && /certificateNumber/i.test(err?.detail ?? '');
-          if (!isDuplicateCertNumber || attempt >= maxAttempts) throw err;
+          const code = err?.code ?? err?.driverError?.code;
+          const isUniqueViolation = code === '23505'
+            || /duplicate key value violates unique constraint/i.test(err?.message ?? '');
+          if (!isUniqueViolation || attempt >= maxAttempts) throw err;
           this.logger.warn(
-            `Número de certificado ${certNumber} ya existía (intento ${attempt}), regenerando…`,
+            `Número de certificado ${certNumber} ya existía (intento ${attempt}), regenerando… [${err?.message}]`,
           );
           certNumber = await this.generateCertificateNumber(eventId);
           ({ buffer: pdfBuffer, name: fileName, url: fileUrl } = await buildAndUploadPdf());
