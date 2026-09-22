@@ -842,7 +842,7 @@ export class CertificatesService {
       where: { evaluatorId, submissionId, certificateType: CertificateType.PEER_REVIEWER },
     });
 
-    const certNumber       = existing?.certificateNumber ?? await this.generateCertificateNumber(eventId);
+    let certNumber          = existing?.certificateNumber ?? await this.generateCertificateNumber(eventId);
     const verificationCode = existing?.verificationCode ?? uuidv4().replace(/-/g, '').substring(0, 12).toUpperCase();
     const verificationUrl  = `${appUrl}/certificado/${verificationCode}`;
     const eventDates       = this.formatEventDates(event);
@@ -857,43 +857,54 @@ export class CertificatesService {
       this.logger.warn(`No se pudo generar QR para ${verificationCode}: ${err.message}`);
     }
 
-    let pdfBuffer: Buffer;
-    try {
-      pdfBuffer = await buildCertificatePdf({
-        authorName:       evaluator.fullName,
-        isMainAuthor:     true,
-        titleEs:          submission.titleEs,
-        productTypeName:  'Certificado de Par Académico',
-        thematicAxisName: '',
-        eventName:        event.name,
-        eventDates,
-        eventCity:        event.city ?? event.location ?? '',
-        certificateNumber: certNumber,
-        verificationUrl,
-        headerLogoBuffer,
-        signatories,
-        organizerLogoBuffers: organizerLogos,
-        qrBuffer,
-        roleLabel:        'PAR ACADÉMICO',
-        descriptionText:  'por su valiosa colaboración como evaluador/a en la revisión académica del capítulo de libro titulado:',
-      }, 'diploma');
-    } catch (err) {
-      this.logger.error(`Error generando PDF de certificado de par académico: ${err.message}`);
-      throw new BadRequestException('Error al generar el PDF del certificado');
-    }
-
     const sanitizedName = evaluator.fullName.replace(/\s+/g, '-');
-    const fileName = `${certNumber}-${sanitizedName}-par-academico.pdf`;
+
+    let pdfBuffer: Buffer;
+    let fileName: string;
     let fileUrl = '';
-    try {
-      fileUrl = await this.storage.upload(
-        { buffer: pdfBuffer, originalname: fileName, mimetype: 'application/pdf', size: pdfBuffer.length } as any,
-        'guidelines',
-        `cert-${verificationCode}-par-academico`,
-      );
-    } catch (err) {
-      this.logger.error(`Error subiendo PDF de certificado de par académico: ${err.message}`);
-    }
+
+    const buildAndUploadPdf = async () => {
+      let buffer: Buffer;
+      try {
+        buffer = await buildCertificatePdf({
+          authorName:       evaluator.fullName,
+          isMainAuthor:     true,
+          titleEs:          submission.titleEs,
+          productTypeName:  'Certificado de Par Académico',
+          thematicAxisName: '',
+          eventName:        event.name,
+          eventDates,
+          eventCity:        event.city ?? event.location ?? '',
+          certificateNumber: certNumber,
+          verificationUrl,
+          headerLogoBuffer,
+          signatories,
+          organizerLogoBuffers: organizerLogos,
+          qrBuffer,
+          roleLabel:        'PAR ACADÉMICO',
+          descriptionText:  'por su valiosa colaboración como evaluador/a en la revisión académica del capítulo de libro titulado:',
+        }, 'diploma');
+      } catch (err) {
+        this.logger.error(`Error generando PDF de certificado de par académico: ${err.message}`);
+        throw new BadRequestException('Error al generar el PDF del certificado');
+      }
+
+      const name = `${certNumber}-${sanitizedName}-par-academico.pdf`;
+      let url = '';
+      try {
+        url = await this.storage.upload(
+          { buffer, originalname: name, mimetype: 'application/pdf', size: buffer.length } as any,
+          'guidelines',
+          `cert-${verificationCode}-par-academico`,
+        );
+      } catch (err) {
+        this.logger.error(`Error subiendo PDF de certificado de par académico: ${err.message}`);
+      }
+
+      return { buffer, name, url };
+    };
+
+    ({ buffer: pdfBuffer, name: fileName, url: fileUrl } = await buildAndUploadPdf());
 
     let cert: Certificate;
     if (existing) {
@@ -903,19 +914,33 @@ export class CertificatesService {
       cert = await this.certRepo.save(existing);
       this.logger.log(`📜 Certificado de par académico ${certNumber} REGENERADO para ${evaluator.fullName}`);
     } else {
-      cert = await this.certRepo.save(this.certRepo.create({
-        certificateType:  CertificateType.PEER_REVIEWER,
-        certificateNumber: certNumber,
-        submissionId,
-        authorId:         null,
-        evaluatorId,
-        productTypeName:  'Certificado de Par Académico',
-        verificationCode,
-        fileUrl,
-        fileName,
-        issuedAt:         new Date(),
-        eventId,
-      }));
+      const maxAttempts = 5;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          cert = await this.certRepo.save(this.certRepo.create({
+            certificateType:  CertificateType.PEER_REVIEWER,
+            certificateNumber: certNumber,
+            submissionId,
+            authorId:         null,
+            evaluatorId,
+            productTypeName:  'Certificado de Par Académico',
+            verificationCode,
+            fileUrl,
+            fileName,
+            issuedAt:         new Date(),
+            eventId,
+          }));
+          break;
+        } catch (err: any) {
+          const isDuplicateCertNumber = err?.code === '23505' && /certificateNumber/i.test(err?.detail ?? '');
+          if (!isDuplicateCertNumber || attempt >= maxAttempts) throw err;
+          this.logger.warn(
+            `Número de certificado ${certNumber} ya existía (intento ${attempt}), regenerando…`,
+          );
+          certNumber = await this.generateCertificateNumber(eventId);
+          ({ buffer: pdfBuffer, name: fileName, url: fileUrl } = await buildAndUploadPdf());
+        }
+      }
       this.logger.log(`📜 Certificado de par académico ${certNumber} generado para ${evaluator.fullName}`);
     }
 
