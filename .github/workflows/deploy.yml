@@ -61,15 +61,18 @@ jobs:
             pm2 start dist/src/main.js --name sems-api
             pm2 save
 
-            # ── Nginx: aumentar límite de upload a 10MB ─────────────────────
+            # ── Nginx: aumentar límite de upload a 100MB ─────────────────────
+            # La postulación pública permite hasta 20MB por tipo de producto (y puede
+            # haber más de uno) + 5MB de foto y 5MB de cédula por cada autor (hasta 4),
+            # así que el body total puede superar ampliamente 10MB.
             NGINX_CONF="/etc/nginx/nginx.conf"
             if [ -f "$NGINX_CONF" ]; then
               if ! grep -q "client_max_body_size" "$NGINX_CONF"; then
-                sudo sed -i '/http {/a\    client_max_body_size 10M;' "$NGINX_CONF"
+                sudo sed -i '/http {/a\    client_max_body_size 100M;' "$NGINX_CONF"
                 echo "✅ client_max_body_size añadido al bloque http"
               else
-                sudo sed -i 's/client_max_body_size [^;]*/client_max_body_size 10M/' "$NGINX_CONF"
-                echo "✅ client_max_body_size actualizado a 10M"
+                sudo sed -i 's/client_max_body_size [^;]*/client_max_body_size 100M/' "$NGINX_CONF"
+                echo "✅ client_max_body_size actualizado a 100M"
               fi
               sudo nginx -t && sudo systemctl reload nginx && echo "✅ Nginx recargado"
             else
