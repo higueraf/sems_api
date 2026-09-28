@@ -47,7 +47,25 @@ export class PersonsService {
       });
       person = await this.personRepo.save(person);
     }
+    await this.linkOrphanedAuthors(person.id, email);
     return person;
+  }
+
+  /**
+   * Vincula a esta Person cualquier submission_author histórico con el mismo
+   * email que haya quedado sin personId (p.ej. por un fallo silencioso al
+   * postular antes de que existiera esta persona). Así, cuando alguien se
+   * registra o vuelve a postular, sus postulaciones y certificados previos
+   * aparecen automáticamente en su portal.
+   */
+  private async linkOrphanedAuthors(personId: string, email: string): Promise<void> {
+    await this.authorRepo
+      .createQueryBuilder()
+      .update(SubmissionAuthor)
+      .set({ personId })
+      .where('"personId" IS NULL')
+      .andWhere('LOWER(TRIM(email)) = :email', { email })
+      .execute();
   }
 
   /**
