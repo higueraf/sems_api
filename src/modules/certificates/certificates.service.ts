@@ -698,7 +698,7 @@ export class CertificatesService {
         where: { submissionId, authorId: author.id, productTypeId },
       });
 
-      const certNumber       = existing?.certificateNumber ?? await this.generateCertificateNumber(submission.eventId);
+      let certNumber          = existing?.certificateNumber ?? await this.generateCertificateNumber(submission.eventId);
       const verificationCode = existing?.verificationCode ?? uuidv4().replace(/-/g, '').substring(0, 12).toUpperCase();
       const isMainAuthor     = author.isCorresponding || author.authorOrder === 0;
       const verificationUrl  = `${appUrl}/certificado/${verificationCode}`;
@@ -728,46 +728,51 @@ export class CertificatesService {
       // Obtener todos los autores para la carta
       const allAuthorsStr = submission.authors.map(a => a.fullName).join(', ');
 
-      let pdfBufferDiploma: Buffer;
-      try {
-        const pdfOpts = {
-          authorName:       author.fullName,
-          isMainAuthor,
-          titleEs:          submission.titleEs,
-          productTypeName:  productType?.name ?? 'Producción Científica',
-          thematicAxisName: submission.thematicAxis?.name ?? '',
-          eventName:        event?.name ?? 'III Simposio Internacional de Ciencia Abierta 2026',
-          eventDates,
-          eventCity:        event?.city ?? event?.location ?? '',
-          certificateNumber: certNumber,
-          verificationUrl,
-          headerLogoBuffer,
-          signatories,
-          organizerLogoBuffers: organizerLogos,
-          qrBuffer,
-          allAuthors: allAuthorsStr,
-          isbnCode: submission.isbnCode ?? undefined,
-        };
-        pdfBufferDiploma = await buildCertificatePdf(pdfOpts, certStyle);
-      } catch (err) {
-        this.logger.error(`Error generando PDFs certificado para ${author.fullName}: ${err.message}`);
-        throw new BadRequestException('Error al generar los PDFs del certificado');
-      }
-
-      // Subir el PDF al storage
       const sanitizedName = author.fullName.replace(/\s+/g, '-');
-      const fileNameDiploma = `${certNumber}-${sanitizedName}-diploma.pdf`;
-      let fileUrlDiploma = '';
 
-      try {
-        fileUrlDiploma = await this.storage.upload(
-          { buffer: pdfBufferDiploma, originalname: fileNameDiploma, mimetype: 'application/pdf', size: pdfBufferDiploma.length } as any,
-          'guidelines', // carpeta pública
-          `cert-${verificationCode}-diploma`,
-        );
-      } catch (err) {
-        this.logger.error(`Error subiendo PDF certificado: ${err.message}`);
-      }
+      const buildAndUploadPdf = async () => {
+        let buffer: Buffer;
+        try {
+          const pdfOpts = {
+            authorName:       author.fullName,
+            isMainAuthor,
+            titleEs:          submission.titleEs,
+            productTypeName:  productType?.name ?? 'Producción Científica',
+            thematicAxisName: submission.thematicAxis?.name ?? '',
+            eventName:        event?.name ?? 'III Simposio Internacional de Ciencia Abierta 2026',
+            eventDates,
+            eventCity:        event?.city ?? event?.location ?? '',
+            certificateNumber: certNumber,
+            verificationUrl,
+            headerLogoBuffer,
+            signatories,
+            organizerLogoBuffers: organizerLogos,
+            qrBuffer,
+            allAuthors: allAuthorsStr,
+            isbnCode: submission.isbnCode ?? undefined,
+          };
+          buffer = await buildCertificatePdf(pdfOpts, certStyle);
+        } catch (err) {
+          this.logger.error(`Error generando PDFs certificado para ${author.fullName}: ${err.message}`);
+          throw new BadRequestException('Error al generar los PDFs del certificado');
+        }
+
+        const name = `${certNumber}-${sanitizedName}-diploma.pdf`;
+        let url = '';
+        try {
+          url = await this.storage.upload(
+            { buffer, originalname: name, mimetype: 'application/pdf', size: buffer.length } as any,
+            'guidelines', // carpeta pública
+            `cert-${verificationCode}-diploma`,
+          );
+        } catch (err) {
+          this.logger.error(`Error subiendo PDF certificado: ${err.message}`);
+        }
+
+        return { buffer, name, url };
+      };
+
+      let { buffer: pdfBufferDiploma, name: fileNameDiploma, url: fileUrlDiploma } = await buildAndUploadPdf();
 
       if (existing) {
         existing.fileUrl       = fileUrlDiploma;
@@ -776,19 +781,34 @@ export class CertificatesService {
         created.push(await this.certRepo.save(existing));
         this.logger.log(`📜 Certificado ${certNumber} REGENERADO para ${author.fullName}`);
       } else {
-        const cert = this.certRepo.create({
-          certificateNumber: certNumber,
-          submissionId,
-          authorId:          author.id,
-          productTypeId,
-          productTypeName:   productType?.name ?? '',
-          verificationCode,
-          fileUrl:           fileUrlDiploma,
-          fileName:          fileNameDiploma,
-          issuedAt:          new Date(),
-          eventId:           submission.eventId,
-        });
-        created.push(await this.certRepo.save(cert));
+        const maxAttempts = 5;
+        for (let attempt = 1; ; attempt++) {
+          try {
+            created.push(await this.certRepo.save(this.certRepo.create({
+              certificateNumber: certNumber,
+              submissionId,
+              authorId:          author.id,
+              productTypeId,
+              productTypeName:   productType?.name ?? '',
+              verificationCode,
+              fileUrl:           fileUrlDiploma,
+              fileName:          fileNameDiploma,
+              issuedAt:          new Date(),
+              eventId:           submission.eventId,
+            })));
+            break;
+          } catch (err: any) {
+            const code = err?.code ?? err?.driverError?.code;
+            const isUniqueViolation = code === '23505'
+              || /duplicate key value violates unique constraint/i.test(err?.message ?? '');
+            if (!isUniqueViolation || attempt >= maxAttempts) throw err;
+            this.logger.warn(
+              `Número de certificado ${certNumber} ya existía (intento ${attempt}), regenerando… [${err?.message}]`,
+            );
+            certNumber = await this.generateCertificateNumber(submission.eventId);
+            ({ buffer: pdfBufferDiploma, name: fileNameDiploma, url: fileUrlDiploma } = await buildAndUploadPdf());
+          }
+        }
         this.logger.log(`📜 Certificado ${certNumber} generado para ${author.fullName}`);
       }
     }
