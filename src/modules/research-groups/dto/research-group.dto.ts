@@ -8,6 +8,14 @@ export class CreateResearchGroupDto {
   universityId: string;
 }
 
+export class FindOrCreateResearchGroupDto {
+  @IsString()
+  name: string;
+
+  @IsUUID()
+  universityId: string;
+}
+
 export class UpdateResearchGroupDto {
   @IsString()
   @IsOptional()

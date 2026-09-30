@@ -12,6 +12,7 @@ import { Certificate } from '../../entities/certificate.entity';
 import { Person } from '../../entities/person.entity';
 import { PersonsModule } from '../persons/persons.module';
 import { UniversitiesModule } from '../universities/universities.module';
+import { ResearchGroupsModule } from '../research-groups/research-groups.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { UniversitiesModule } from '../universities/universities.module';
     ]),
     PersonsModule,
     UniversitiesModule,
+    ResearchGroupsModule,
   ],
   controllers: [SubmissionsController],
   providers: [SubmissionsService],

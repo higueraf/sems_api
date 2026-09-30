@@ -25,6 +25,7 @@ import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
 import { PersonsService } from '../persons/persons.service';
 import { UniversitiesService } from '../universities/universities.service';
+import { ResearchGroupsService } from '../research-groups/research-groups.service';
 
 /** Ordena en memoria un arreglo de autores por su authorOrder (ascendente). */
 function sortAuthors(authors?: SubmissionAuthor[]): void {
@@ -97,6 +98,7 @@ export class SubmissionsService implements OnModuleInit {
     private mailService: MailService,
     private personsService: PersonsService,
     private universitiesService: UniversitiesService,
+    private researchGroupsService: ResearchGroupsService,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
 
@@ -108,6 +110,18 @@ export class SubmissionsService implements OnModuleInit {
     if (universityName && countryId) {
       const university = await this.universitiesService.findOrCreate({ name: universityName, countryId });
       return university.id;
+    }
+    return undefined;
+  }
+
+  /** Resuelve researchGroupId: usa el existente, o crea/reutiliza un semillero por nombre dentro de la universidad dada. */
+  private async resolveResearchGroupId(
+    researchGroupId?: string, researchGroupName?: string, universityId?: string,
+  ): Promise<string | undefined> {
+    if (researchGroupId) return researchGroupId;
+    if (researchGroupName && universityId) {
+      const group = await this.researchGroupsService.findOrCreate({ name: researchGroupName, universityId });
+      return group.id;
     }
     return undefined;
   }
@@ -222,10 +236,13 @@ export class SubmissionsService implements OnModuleInit {
       initialProductStatuses[ptId] = SubmissionStatus.RECEIVED;
     }
 
-    // Resolver universidad de cada autor (find-or-create si viene solo el nombre)
+    // Resolver universidad y semillero de cada autor (find-or-create si viene solo el nombre)
     for (const author of dto.authors ?? []) {
       author.universityId = await this.resolveUniversityId(
         author.universityId, author.universityName, author.countryId,
+      );
+      author.researchGroupId = await this.resolveResearchGroupId(
+        author.researchGroupId, author.researchGroupName, author.universityId,
       );
     }
 
@@ -1054,6 +1071,7 @@ export class SubmissionsService implements OnModuleInit {
     const nextOrder = (submission.authors ?? []).reduce((max, a) => Math.max(max, a.authorOrder), -1) + 1;
 
     const universityId = await this.resolveUniversityId(dto.universityId, dto.universityName, dto.countryId);
+    const researchGroupId = await this.resolveResearchGroupId(dto.researchGroupId, dto.researchGroupName, universityId);
 
     // Crear o encontrar person
     const person = await this.personsService.findOrCreate({
@@ -1064,7 +1082,7 @@ export class SubmissionsService implements OnModuleInit {
       affiliation:       dto.affiliation,
       universityId,
       facultyId:         dto.facultyId,
-      researchGroupId:   dto.researchGroupId,
+      researchGroupId,
       orcid:             dto.orcid,
       phone:             dto.phone,
       countryId:         dto.countryId,
@@ -1083,7 +1101,7 @@ export class SubmissionsService implements OnModuleInit {
       affiliation:       dto.affiliation,
       universityId,
       facultyId:         dto.facultyId,
-      researchGroupId:   dto.researchGroupId,
+      researchGroupId,
       emailType:         dto.emailType ?? 'personal',
       orcid:             dto.orcid,
       phone:             dto.phone,
@@ -1136,6 +1154,9 @@ export class SubmissionsService implements OnModuleInit {
     const universityId = await this.resolveUniversityId(
       dto.universityId, dto.universityName, dto.countryId ?? author.countryId,
     );
+    const researchGroupId = await this.resolveResearchGroupId(
+      dto.researchGroupId, dto.researchGroupName, universityId ?? author.universityId,
+    );
 
     Object.assign(author, {
       fullName:          dto.fullName          ?? author.fullName,
@@ -1144,7 +1165,7 @@ export class SubmissionsService implements OnModuleInit {
       affiliation:       dto.affiliation       ?? author.affiliation,
       universityId:      universityId          ?? author.universityId,
       facultyId:         dto.facultyId         ?? author.facultyId,
-      researchGroupId:   dto.researchGroupId   ?? author.researchGroupId,
+      researchGroupId:   researchGroupId       ?? author.researchGroupId,
       emailType:         dto.emailType         ?? author.emailType,
       email:             dto.email             ? dto.email.toLowerCase().trim() : author.email,
       orcid:             dto.orcid             ?? author.orcid,

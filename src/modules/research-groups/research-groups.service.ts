@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ResearchGroup } from '../../entities/research-group.entity';
-import { CreateResearchGroupDto, UpdateResearchGroupDto } from './dto/research-group.dto';
+import { CreateResearchGroupDto, UpdateResearchGroupDto, FindOrCreateResearchGroupDto } from './dto/research-group.dto';
 
 @Injectable()
 export class ResearchGroupsService {
@@ -22,6 +22,18 @@ export class ResearchGroupsService {
     const group = await this.repo.findOne({ where: { id } });
     if (!group) throw new NotFoundException('Research group not found');
     return group;
+  }
+
+  /** Usado por el flujo público de postulación: reutiliza el semillero si ya existe (case-insensitive) o lo crea. */
+  async findOrCreate(dto: FindOrCreateResearchGroupDto): Promise<ResearchGroup> {
+    const name = dto.name.trim();
+    const existing = await this.repo
+      .createQueryBuilder('g')
+      .where('g.universityId = :universityId', { universityId: dto.universityId })
+      .andWhere('LOWER(g.name) = LOWER(:name)', { name })
+      .getOne();
+    if (existing) return existing;
+    return this.repo.save(this.repo.create({ name, universityId: dto.universityId }));
   }
 
   async create(dto: CreateResearchGroupDto) {

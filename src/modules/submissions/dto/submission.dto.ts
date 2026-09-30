@@ -43,6 +43,11 @@ export class SubmissionAuthorDto {
   @IsOptional()
   researchGroupId?: string;
 
+  /** Nombre de un semillero que no está en el catálogo: se crea (find-or-create) junto a universityId. */
+  @IsString()
+  @IsOptional()
+  researchGroupName?: string;
+
   // Tipo de correo: 'institutional' | 'personal'
   @IsString()
   @IsNotEmpty({ message: 'El tipo de correo es requerido' })
@@ -215,6 +220,10 @@ export class AdminAuthorDto {
   @IsUUID()
   @IsOptional()
   researchGroupId?: string;
+
+  @IsString()
+  @IsOptional()
+  researchGroupName?: string;
 
   @IsString()
   @IsOptional()
