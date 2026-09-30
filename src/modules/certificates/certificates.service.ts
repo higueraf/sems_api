@@ -1159,9 +1159,17 @@ export class CertificatesService {
     for (const certId of certificateIds) {
       const cert = await this.certRepo.findOne({
         where: { id: certId },
-        relations: ['author', 'submission', 'submission.event'],
+        relations: ['author', 'evaluator', 'submission', 'submission.event'],
       });
       if (!cert) continue;
+
+      const isPeerReviewer = cert.certificateType === CertificateType.PEER_REVIEWER;
+      const recipient = isPeerReviewer ? cert.evaluator : cert.author;
+      if (!recipient) {
+        this.logger.warn(`Certificado ${certId} no tiene destinatario (${isPeerReviewer ? 'evaluador' : 'autor'}) — se omite`);
+        failed++;
+        continue;
+      }
 
       // Descargar PDFs para adjuntar
       const pdfAttachments: { buffer: Buffer; fileName: string }[] = [];
@@ -1192,24 +1200,35 @@ export class CertificatesService {
         this.logger.warn(`No se pudo obtener PDF Diploma del storage para ${certId}: ${err.message}`);
       }
 
-      const author      = cert.author;
       const appUrl      = (this.config.get<string>('frontendUrl') || 'http://localhost:5173')
         .split(',').map(u => u.trim()).find(u => u.startsWith('https://')) ?? 'http://localhost:5173';
       const verifyUrl   = `${appUrl}/certificado/${cert.verificationCode}`;
 
-      const html = this.buildCertificateEmailHtml(
-        author.fullName,
-        cert.submission?.titleEs ?? '',
-        cert.productTypeName ?? '',
-        cert.certificateNumber,
-        verifyUrl,
-        cert.submission?.event ?? null,
-      );
+      const html = isPeerReviewer
+        ? this.buildPeerReviewerCertificateEmailHtml(
+            recipient.fullName,
+            cert.certificateNumber,
+            verifyUrl,
+            cert.submission?.event ?? null,
+            cert.submission?.titleEs ?? '',
+          )
+        : this.buildCertificateEmailHtml(
+            recipient.fullName,
+            cert.submission?.titleEs ?? '',
+            cert.productTypeName ?? '',
+            cert.certificateNumber,
+            verifyUrl,
+            cert.submission?.event ?? null,
+          );
+
+      const subject = isPeerReviewer
+        ? `Certificado de Par Académico — ${cert.certificateNumber}`
+        : `Certificado de Participación — ${cert.certificateNumber}`;
 
       const ok = await this.mailService.sendCertificateEmail(
-        author.email,
-        author.fullName,
-        `Certificado de Participación — ${cert.certificateNumber}`,
+        recipient.email,
+        recipient.fullName,
+        subject,
         html,
         cert.submissionId,
         user.id,
