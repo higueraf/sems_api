@@ -535,13 +535,20 @@ export class CertificatesService {
 
   // ── Generar número correlativo ───────────────────────────────────────────────
 
-  private async generateCertificateNumber(eventId: string): Promise<string> {
+  /**
+   * certificateNumber es único a nivel de TODA la base de datos (no por evento) —
+   * ver constraint UQ_9742ea65bce69db989c2e676936 sobre esa sola columna. La
+   * numeración debe ser global por año, sin filtrar por eventId: de lo contrario,
+   * el primer certificado de cada evento nuevo siempre calcularía "CERT-YYYY-0001",
+   * que ya existiría de un evento anterior, colisionando de forma determinística
+   * (ni los reintentos ayudan, porque el cálculo da siempre el mismo resultado).
+   */
+  private async generateCertificateNumber(_eventId: string): Promise<string> {
     return this.dataSource.transaction(async (manager) => {
       const year = new Date().getFullYear();
       const last = await manager
         .createQueryBuilder(Certificate, 'c')
-        .where('c.eventId = :eventId', { eventId })
-        .andWhere("c.certificateNumber LIKE :prefix", { prefix: `CERT-${year}-%` })
+        .where("c.certificateNumber LIKE :prefix", { prefix: `CERT-${year}-%` })
         .orderBy('c.certificateNumber', 'DESC')
         .getOne();
 
