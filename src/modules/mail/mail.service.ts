@@ -651,4 +651,45 @@ export class MailService implements OnModuleInit {
       submission?.referenceCode ? undefined : undefined,
     );
   }
+
+  async sendPasswordReset(user: { email: string; fullName: string }, resetUrl: string) {
+    const branding = await this.getBranding(null);
+    const content = `
+      <div style="font-size:18px;font-weight:bold;color:#003918;margin-bottom:20px;">Estimado/a ${user.fullName},</div>
+      <p style="color:#333333;margin-bottom:16px;">
+        Recibimos una solicitud para restablecer la contraseña de su cuenta en ${branding.name}.
+        Si usted no la solicitó, puede ignorar este correo — su contraseña actual seguirá funcionando.
+      </p>
+
+      <div style="text-align:center;margin:25px 0;">
+        <a href="${resetUrl}" style="display:inline-block;background-color:#007F3A;color:white;padding:14px 30px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">
+          Restablecer contraseña →
+        </a>
+      </div>
+
+      <div style="background-color:#fffbeb;border-left:4px solid #f59e0b;padding:15px 20px;margin:20px 0;border-radius:0 4px 4px 0;">
+        <p style="color:#92400e;margin:0;font-size:13px;">
+          Este enlace expira en <strong>1 hora</strong> y solo puede usarse una vez.
+        </p>
+      </div>
+
+      <p style="color:#999999;font-size:12px;margin-top:20px;">
+        Si el botón no funciona, copie y pegue este enlace en su navegador:<br>
+        <a href="${resetUrl}" style="color:#007F3A;word-break:break-all;">${resetUrl}</a>
+      </p>
+
+      <div style="margin-top:30px;padding-top:20px;border-top:1px solid #e0e0e0;">
+        <p style="margin:5px 0;color:#666;">Con los mejores deseos académicos,</p>
+        <p style="margin:5px 0;"><strong style="color:#003918;">Comité Organizador</strong></p>
+        <p style="margin:5px 0;color:#007F3A;">${branding.name} ${branding.year}</p>
+      </div>
+    `;
+
+    return this.send(
+      user.email, user.fullName,
+      '[SEMS] Restablecer contraseña',
+      this.buildBaseLayout(content, branding),
+      EmailType.CUSTOM,
+    );
+  }
 }

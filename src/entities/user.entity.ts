@@ -39,6 +39,13 @@ export class User {
   @Column({ nullable: true })
   lastLoginAt: Date;
 
+  /** Hash del token de recuperación de contraseña (nunca se guarda en claro). */
+  @Column({ nullable: true, select: false })
+  resetPasswordTokenHash: string | null;
+
+  @Column({ nullable: true, type: 'timestamptz' })
+  resetPasswordExpires: Date | null;
+
   /** Universidad del evaluador/par académico (opcional). */
   @ManyToOne(() => University, { eager: true, nullable: true })
   @JoinColumn({ name: 'universityId' })
