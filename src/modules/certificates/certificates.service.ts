@@ -1257,7 +1257,11 @@ export class CertificatesService {
     const certs = await this.certRepo.findByIds(certificateIds);
     const groups = new Map<string, string>(); // `${submissionId}:${productTypeId}` → submissionId
     for (const c of certs) {
-      if (c.emailSentAt) groups.set(`${c.submissionId}:${c.productTypeId}`, c.submissionId);
+      // Los certificados de par académico no tienen productTypeId (no aplica esta transición de estado)
+      if (c.certificateType === CertificateType.PEER_REVIEWER) continue;
+      if (c.emailSentAt && c.submissionId && c.productTypeId) {
+        groups.set(`${c.submissionId}:${c.productTypeId}`, c.submissionId);
+      }
     }
 
     for (const [key] of groups) {
