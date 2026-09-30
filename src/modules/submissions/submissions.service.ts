@@ -294,7 +294,37 @@ export class SubmissionsService implements OnModuleInit {
       notes: 'Postulación recibida automáticamente',
     }));
 
-    // Background: uploads + correo
+    // Vincular cada autor a su Person ANTES de responder: "Mis postulaciones" del
+    // portal filtra por personId, así que si esto quedara en el bloque de fondo
+    // (más abajo) el autor no aparecería hasta el próximo refresh/refetch.
+    const personByAuthorId = new Map<string, Person>();
+    const authorsForPersons = await this.authorRepo.find({ where: { submissionId: saved.id } });
+    for (const author of authorsForPersons) {
+      try {
+        const person = await this.personsService.findOrCreate({
+          fullName:          author.fullName,
+          email:             author.email.toLowerCase().trim(),
+          academicTitle:     author.academicTitle,
+          participantType:   author.participantType,
+          affiliation:       author.affiliation,
+          universityId:      author.universityId,
+          facultyId:         author.facultyId,
+          researchGroupId:   author.researchGroupId,
+          orcid:             author.orcid,
+          phone:             author.phone,
+          countryId:         author.countryId,
+          city:              author.city,
+          identityDocType:   author.identityDocType,
+          identityDocNumber: author.identityDocNumber,
+        });
+        await this.authorRepo.update(author.id, { personId: person.id });
+        personByAuthorId.set(author.id, person);
+      } catch (e) {
+        this.logger.error(`Error vinculando person para autor ${author.email}: ${e.message}`);
+      }
+    }
+
+    // Background: uploads, cuentas de autor y correos
     setTimeout(async () => {
       // 1. Archivos por tipo de producto científico
       if (productFiles.length > 0 && storage) {
@@ -416,30 +446,13 @@ export class SubmissionsService implements OnModuleInit {
         }
       }
 
-      // 3. Vincular persons + crear cuentas de autor
+      // 3. Crear cuentas de autor para quienes aún no tengan una
+      // (el vínculo author -> person ya se hizo de forma síncrona antes de responder)
       try {
-        const authorsForPersons = await this.authorRepo.find({ where: { submissionId: saved.id } });
-        for (const author of authorsForPersons) {
+        for (const [authorId, person] of personByAuthorId) {
+          const author = authorsForPersons.find(a => a.id === authorId);
+          if (!author) continue;
           try {
-            const person = await this.personsService.findOrCreate({
-              fullName:          author.fullName,
-              email:             author.email.toLowerCase().trim(),
-              academicTitle:     author.academicTitle,
-              participantType:   author.participantType,
-              affiliation:       author.affiliation,
-              universityId:      author.universityId,
-              facultyId:         author.facultyId,
-              researchGroupId:   author.researchGroupId,
-              orcid:             author.orcid,
-              phone:             author.phone,
-              countryId:         author.countryId,
-              city:              author.city,
-              identityDocType:   author.identityDocType,
-              identityDocNumber: author.identityDocNumber,
-            });
-            // Vincular personId al submission_author
-            await this.authorRepo.update(author.id, { personId: person.id });
-
             // Crear cuenta de usuario si no existe
             if (!person.userId) {
               let userAccount = await this.userRepo.findOne({ where: { email: person.email } });

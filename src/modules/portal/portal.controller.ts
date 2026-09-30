@@ -80,6 +80,60 @@ export class PortalController {
     return this.service.removeAuthor(user.id, id, authorId);
   }
 
+  /** Edita los datos de un autor (si el estatus lo permite) */
+  @Patch('submissions/:id/authors/:authorId')
+  updateAuthor(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Param('authorId') authorId: string,
+    @Body() dto: AdminAuthorDto,
+  ) {
+    return this.service.updateAuthor(user.id, id, authorId, dto);
+  }
+
+  /** Reemplaza la foto de un autor (si el estatus lo permite) */
+  @Post('submissions/:id/authors/:authorId/photo')
+  @UseInterceptors(FileInterceptor('photo', {
+    storage: memoryStorage(),
+    fileFilter: (_req, file, cb) => cb(null, /\.(jpg|jpeg|png|webp)$/i.test(file.originalname)),
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
+  updateAuthorPhoto(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Param('authorId') authorId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.service.updateAuthorPhoto(user.id, id, authorId, file);
+  }
+
+  /** Reemplaza el documento de identidad de un autor (si el estatus lo permite) */
+  @Post('submissions/:id/authors/:authorId/id-doc')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    fileFilter: (_req, file, cb) =>
+      cb(null, /\.pdf$/i.test(file.originalname) || file.mimetype === 'application/pdf'),
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
+  replaceAuthorIdDoc(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Param('authorId') authorId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.service.replaceAuthorIdDoc(user.id, id, authorId, file);
+  }
+
+  /** URL firmada para descargar el documento de identidad de un autor */
+  @Get('submissions/:id/authors/:authorId/id-doc/download')
+  getAuthorIdDocUrl(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Param('authorId') authorId: string,
+  ) {
+    return this.service.getAuthorIdDocUrl(user.id, id, authorId);
+  }
+
   /** Certificados del autor para una postulación */
   @Get('submissions/:id/certificates')
   getMyCertificates(@CurrentUser() user: User, @Param('id') id: string) {

@@ -184,6 +184,15 @@ export class PortalService {
         researchGroupId: a.researchGroupId,
         researchGroup: a.researchGroup ? { id: a.researchGroup.id, name: a.researchGroup.name } : null,
         email: a.email,
+        orcid: a.orcid,
+        phone: a.phone,
+        countryId: a.countryId,
+        city: a.city,
+        identityDocType: a.identityDocType,
+        identityDocNumber: a.identityDocNumber,
+        photoUrl: a.photoUrl,
+        hasIdentityDoc: !!a.identityDocUrl,
+        identityDocFileName: a.identityDocFileName,
         isCorresponding: a.isCorresponding,
         isPresenter: a.isPresenter,
         authorOrder: a.authorOrder,
@@ -310,6 +319,56 @@ export class PortalService {
     await this.submissionsService.removeAuthor(authorId);
     this.logger.log(`➖ Coautor eliminado por el autor [${submission.referenceCode}]`);
     return this.getMySubmission(userId, submissionId);
+  }
+
+  /** Valida acceso + que el autor pertenece a la postulación + que el estatus permite editar autores */
+  private async assertCanManageAuthor(userId: string, submissionId: string, authorId: string) {
+    await this.assertAuthorAccess(userId, submissionId);
+
+    const submission = await this.submissionRepo.findOne({ where: { id: submissionId } });
+    if (!submission) throw new NotFoundException('Postulación no encontrada');
+
+    if (!this.canManageAuthors(submission.status)) {
+      throw new BadRequestException(
+        'Ya no puedes editar los autores en el estatus actual de tu postulación',
+      );
+    }
+
+    const author = await this.authorRepo.findOne({ where: { id: authorId, submissionId } });
+    if (!author) throw new NotFoundException('Autor no encontrado');
+
+    return submission;
+  }
+
+  /** Edita los datos de un autor (solo permitido en estado "received") */
+  async updateAuthor(userId: string, submissionId: string, authorId: string, dto: AdminAuthorDto) {
+    const submission = await this.assertCanManageAuthor(userId, submissionId, authorId);
+    await this.submissionsService.updateAuthor(authorId, dto);
+    this.logger.log(`✏️  Autor editado por el autor [${submission.referenceCode}]`);
+    return this.getMySubmission(userId, submissionId);
+  }
+
+  /** Reemplaza la foto de un autor (solo permitido en estado "received") */
+  async updateAuthorPhoto(userId: string, submissionId: string, authorId: string, file: Express.Multer.File) {
+    await this.assertCanManageAuthor(userId, submissionId, authorId);
+    const url = await this.storage.upload(file, 'photos', `author-${authorId}`);
+    await this.submissionsService.updateAuthorPhoto(authorId, url, this.storage);
+    return this.getMySubmission(userId, submissionId);
+  }
+
+  /** Reemplaza el documento de identidad de un autor (solo permitido en estado "received") */
+  async replaceAuthorIdDoc(userId: string, submissionId: string, authorId: string, file: Express.Multer.File) {
+    await this.assertCanManageAuthor(userId, submissionId, authorId);
+    await this.submissionsService.replaceAuthorIdDoc(authorId, file, this.storage);
+    return this.getMySubmission(userId, submissionId);
+  }
+
+  /** URL firmada temporal para descargar el documento de identidad de un autor */
+  async getAuthorIdDocUrl(userId: string, submissionId: string, authorId: string) {
+    await this.assertAuthorAccess(userId, submissionId);
+    const author = await this.authorRepo.findOne({ where: { id: authorId, submissionId } });
+    if (!author) throw new NotFoundException('Autor no encontrado');
+    return this.submissionsService.getAuthorIdDocUrl(authorId, this.storage);
   }
 
   /** Certificados del autor para una postulación */
