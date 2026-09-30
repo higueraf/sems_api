@@ -6,6 +6,14 @@ import {
 import { Type, Transform } from 'class-transformer';
 import { ParticipantType } from '../../../common/enums/participant-type.enum';
 
+/**
+ * Los selects del frontend envían '' cuando no hay selección (en vez de omitir
+ * el campo). class-validator's @IsOptional() solo trata undefined/null como
+ * "ausente" — una cadena vacía sigue validándose con @IsUUID() y falla. Este
+ * transform normaliza '' a undefined antes de validar.
+ */
+const emptyToUndefined = ({ value }: { value: unknown }) => (value === '' ? undefined : value);
+
 export class SubmissionAuthorDto {
   @IsString()
   @IsNotEmpty({ message: 'El nombre completo es requerido' })
@@ -24,6 +32,7 @@ export class SubmissionAuthorDto {
   @IsOptional()
   affiliation?: string;
 
+  @Transform(emptyToUndefined)
   @IsUUID()
   @IsOptional()
   universityId?: string;
@@ -34,11 +43,13 @@ export class SubmissionAuthorDto {
   universityName?: string;
 
   /** Solo si participantType=estudiante y la universidad es la institución sede (ej. UMAYOR). */
+  @Transform(emptyToUndefined)
   @IsUUID()
   @IsOptional()
   facultyId?: string;
 
   /** Solo si el estudiante pertenece a un semillero de investigación. */
+  @Transform(emptyToUndefined)
   @IsUUID()
   @IsOptional()
   researchGroupId?: string;
@@ -68,6 +79,7 @@ export class SubmissionAuthorDto {
   @IsOptional()
   phone?: string;
 
+  @Transform(emptyToUndefined)
   @IsUUID()
   @IsOptional()
   countryId?: string;
@@ -160,6 +172,7 @@ export class CreateSubmissionDto {
   @IsOptional()
   bibliography?: string;
 
+  @Transform(emptyToUndefined)
   @IsUUID()
   @IsOptional()
   countryId?: string;
@@ -205,6 +218,7 @@ export class AdminAuthorDto {
   @IsOptional()
   affiliation?: string;
 
+  @Transform(emptyToUndefined)
   @IsUUID()
   @IsOptional()
   universityId?: string;
@@ -213,10 +227,12 @@ export class AdminAuthorDto {
   @IsOptional()
   universityName?: string;
 
+  @Transform(emptyToUndefined)
   @IsUUID()
   @IsOptional()
   facultyId?: string;
 
+  @Transform(emptyToUndefined)
   @IsUUID()
   @IsOptional()
   researchGroupId?: string;
@@ -240,6 +256,7 @@ export class AdminAuthorDto {
   @IsOptional()
   phone?: string;
 
+  @Transform(emptyToUndefined)
   @IsUUID()
   @IsOptional()
   countryId?: string;
