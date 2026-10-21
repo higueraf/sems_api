@@ -1,7 +1,7 @@
 import {
   IsString, IsOptional, IsBoolean, IsEmail, IsArray, ValidateNested,
   IsUUID, ArrayMinSize, ArrayMaxSize, MaxLength, IsNumber, IsNotEmpty,
-  IsUrl, Matches, IsEnum,
+  IsUrl, Matches, IsEnum, Equals,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ParticipantType } from '../../../common/enums/participant-type.enum';
@@ -197,6 +197,27 @@ export class CreateSubmissionDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(4)
   authors: SubmissionAuthorDto[];
+
+  // ── Declaraciones obligatorias: la postulación no puede crearse si alguna falta o es `false` ──
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @Equals(true, { message: 'Debe aceptar la declaración de originalidad e ineditismo' })
+  declaresOriginality: boolean;
+
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @Equals(true, { message: 'Debe aceptar la declaración de integridad académica y autoría humana' })
+  declaresHumanAuthorship: boolean;
+
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @Equals(true, { message: 'Debe aceptar el compromiso de permanencia y atención a evaluaciones de pares' })
+  declaresPermanenceCommitment: boolean;
+
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @Equals(true, { message: 'Debe aceptar la autorización y cesión no exclusiva de derechos de divulgación' })
+  declaresRightsAssignment: boolean;
 }
 
 /** DTO relajado para que el admin agregue/edite autores desde el panel */

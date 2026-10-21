@@ -131,6 +131,19 @@ export class Submission {
   @Column({ nullable: true })
   isbnCode: string;
 
+  // ── Declaraciones obligatorias del postulante (deben ser `true` para poder postular) ──
+  @Column({ default: false })
+  declaresOriginality: boolean;
+
+  @Column({ default: false })
+  declaresHumanAuthorship: boolean;
+
+  @Column({ default: false })
+  declaresPermanenceCommitment: boolean;
+
+  @Column({ default: false })
+  declaresRightsAssignment: boolean;
+
   @OneToMany(() => SubmissionAuthor, (a) => a.submission, { cascade: true, eager: true })
   authors: SubmissionAuthor[];
 
