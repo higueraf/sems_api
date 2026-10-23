@@ -151,18 +151,29 @@ export class SubmissionsService implements OnModuleInit {
     /** Archivos por tipo de producto: clave = productTypeId, valor = archivo */
     productFiles: Express.Multer.File[] = [],
   ) {
+    // productTypeIds: usar los del DTO o construir desde productTypeId
+    const allProductTypeIds = dto.productTypeIds?.length
+      ? dto.productTypeIds
+      : [dto.productTypeId];
+
+    const selectedProductTypes = allProductTypeIds.length
+      ? await this.productTypeRepo.findBy({ id: In(allProductTypeIds) })
+      : [];
+
+    // Cada tipo de producto que requiere archivo (ej. docx para Capítulo de
+    // Libro, pptx para Ponencia) debe traer su adjunto correspondiente.
+    const missingFile = selectedProductTypes.find(
+      pt => pt.requiresFile && !productFiles.some(pf => pf.fieldname === `productFile_${pt.id}`),
+    );
+    if (missingFile) {
+      throw new BadRequestException(`Debe adjuntar el archivo requerido para "${missingFile.name}"`);
+    }
+
     // Validar archivos por tipo de producto
     if (productFiles.length > 0) {
-      const productTypeIds = productFiles
-        .map(f => f.fieldname.replace('productFile_', ''))
-        .filter(Boolean);
-      const productTypes = productTypeIds.length
-        ? await this.productTypeRepo.findBy({ id: In(productTypeIds) })
-        : [];
-
       for (const pf of productFiles) {
         const ptId = pf.fieldname.replace('productFile_', '');
-        const pt   = productTypes.find(p => p.id === ptId);
+        const pt   = selectedProductTypes.find(p => p.id === ptId);
         const allowed = getAllowedMimesForFormats(pt?.allowedFileFormats);
         if (pf.size > MAX_PRODUCT_FILE_SIZE)
           throw new BadRequestException(`El archivo "${pf.originalname}" supera 20 MB`);
@@ -218,11 +229,6 @@ export class SubmissionsService implements OnModuleInit {
       const existing = await this.repo.findOne({ where: { referenceCode } });
       if (!existing) isUnique = true;
     }
-
-    // productTypeIds: usar los del DTO o construir desde productTypeId
-    const allProductTypeIds = dto.productTypeIds?.length
-      ? dto.productTypeIds
-      : [dto.productTypeId];
 
     // Archivo principal (legacy): primer archivo por tipo de producto o el 'file' legacy
     const primaryProductFile = productFiles.find(
