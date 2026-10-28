@@ -520,7 +520,10 @@ export class SubmissionsService implements OnModuleInit {
 
   // ── Listar / buscar ─────────────────────────────────────────────────────────
 
-  async findAll(filters: { eventId?: string; status?: string; thematicAxisId?: string; productTypeId?: string; search?: string }) {
+  async findAll(filters: {
+    eventId?: string; status?: string; thematicAxisId?: string; productTypeId?: string; search?: string;
+    countryId?: string; universityId?: string; facultyId?: string;
+  }) {
     const query = this.repo
       .createQueryBuilder('s')
       .leftJoinAndSelect('s.thematicAxis', 'axis')
@@ -536,6 +539,10 @@ export class SubmissionsService implements OnModuleInit {
     if (filters.eventId)        query.andWhere('s.eventId = :eventId',       { eventId: filters.eventId });
     if (filters.status)         query.andWhere('s.status = :status',         { status: filters.status });
     if (filters.thematicAxisId) query.andWhere('s.thematicAxisId = :axisId', { axisId: filters.thematicAxisId });
+    // Coinciden si CUALQUIER autor de la postulación pertenece al país/universidad/facultad filtrado
+    if (filters.countryId)      query.andWhere('authors.countryId = :countryId',       { countryId: filters.countryId });
+    if (filters.universityId)   query.andWhere('authors.universityId = :universityId', { universityId: filters.universityId });
+    if (filters.facultyId)      query.andWhere('authors.facultyId = :facultyId',       { facultyId: filters.facultyId });
     if (filters.productTypeId) {
       query.andWhere(
         '(s.productTypeId = :ptId OR (s.productTypeIds IS NOT NULL AND s.productTypeIds ::jsonb @> :ptIdJson ::jsonb))',
@@ -1087,6 +1094,61 @@ export class SubmissionsService implements OnModuleInit {
     }
 
     return { total, byStatus, byProductType: Object.values(productMap) };
+  }
+
+  /**
+   * Autores únicos del evento (deduplicados por personId, o por email cuando
+   * el autor aún no está vinculado a un Person) con la cantidad de
+   * postulaciones de cada uno y el listado de esas postulaciones.
+   */
+  async getUniqueAuthors(eventId: string) {
+    const authors = await this.authorRepo
+      .createQueryBuilder('a')
+      .innerJoin('a.submission', 's')
+      .addSelect(['s.id', 's.referenceCode', 's.titleEs', 's.status', 's.createdAt'])
+      .leftJoinAndSelect('a.university', 'university')
+      .leftJoinAndSelect('a.country', 'country')
+      .where('s.eventId = :eventId', { eventId })
+      .orderBy('a.createdAt', 'ASC')
+      .getMany();
+
+    const grouped = new Map<string, {
+      key: string; fullName: string; email: string; personId: string | null;
+      universityId: string | null; universityName: string | null;
+      countryId: string | null; countryName: string | null;
+      submissions: { id: string; referenceCode: string; titleEs: string; status: string; createdAt: Date }[];
+    }>();
+
+    for (const a of authors) {
+      const key = a.personId ?? a.email.toLowerCase().trim();
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key,
+          fullName: a.fullName,
+          email: a.email,
+          personId: a.personId ?? null,
+          universityId: a.universityId ?? null,
+          universityName: a.university?.name ?? null,
+          countryId: a.countryId ?? null,
+          countryName: a.country?.name ?? null,
+          submissions: [],
+        });
+      }
+      const entry = grouped.get(key)!;
+      if (!entry.submissions.some(sub => sub.id === a.submission.id)) {
+        entry.submissions.push({
+          id: a.submission.id,
+          referenceCode: a.submission.referenceCode,
+          titleEs: a.submission.titleEs,
+          status: a.submission.status,
+          createdAt: a.submission.createdAt,
+        });
+      }
+    }
+
+    return Array.from(grouped.values())
+      .map(entry => ({ ...entry, submissionCount: entry.submissions.length }))
+      .sort((a, b) => b.submissionCount - a.submissionCount || a.fullName.localeCompare(b.fullName));
   }
 
   // ── Gestión de autores desde el admin ───────────────────────────────────────

@@ -110,8 +110,13 @@ export class SubmissionsController {
     @Query('thematicAxisId') thematicAxisId?: string,
     @Query('productTypeId') productTypeId?: string,
     @Query('search') search?: string,
+    @Query('countryId') countryId?: string,
+    @Query('universityId') universityId?: string,
+    @Query('facultyId') facultyId?: string,
   ) {
-    return this.service.findAll({ eventId, status, thematicAxisId, productTypeId, search });
+    return this.service.findAll({
+      eventId, status, thematicAxisId, productTypeId, search, countryId, universityId, facultyId,
+    });
   }
 
   @UseGuards(RolesGuard)
@@ -119,6 +124,13 @@ export class SubmissionsController {
   @Get('admin/stats')
   getStats(@Query('eventId') eventId: string) {
     return this.service.getStats(eventId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
+  @Get('admin/authors')
+  getUniqueAuthors(@Query('eventId') eventId: string) {
+    return this.service.getUniqueAuthors(eventId);
   }
 
   @UseGuards(RolesGuard)
