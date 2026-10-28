@@ -12,6 +12,7 @@ import { ScientificProductType } from '../../entities/scientific-product-type.en
 import { User } from '../../entities/user.entity';
 import { Certificate } from '../../entities/certificate.entity';
 import { Person } from '../../entities/person.entity';
+import { Event } from '../../entities/event.entity';
 import {
   CreateSubmissionDto, UpdateSubmissionStatusDto,
   SendCustomEmailDto, AssignEvaluatorDto, BulkEmailDto,
@@ -95,6 +96,7 @@ export class SubmissionsService implements OnModuleInit {
     @InjectRepository(User)                     private userRepo: Repository<User>,
     @InjectRepository(Certificate)              private certRepo: Repository<Certificate>,
     @InjectRepository(Person)                   private personRepo: Repository<Person>,
+    @InjectRepository(Event)                    private eventRepo: Repository<Event>,
     private mailService: MailService,
     private personsService: PersonsService,
     private universitiesService: UniversitiesService,
@@ -151,6 +153,12 @@ export class SubmissionsService implements OnModuleInit {
     /** Archivos por tipo de producto: clave = productTypeId, valor = archivo */
     productFiles: Express.Multer.File[] = [],
   ) {
+    const event = await this.eventRepo.findOneBy({ id: dto.eventId });
+    if (!event) throw new NotFoundException('Evento no encontrado');
+    if (event.submissionDeadline && new Date() > new Date(event.submissionDeadline)) {
+      throw new BadRequestException('Las postulaciones para este evento ya están cerradas');
+    }
+
     // productTypeIds: usar los del DTO o construir desde productTypeId
     const allProductTypeIds = dto.productTypeIds?.length
       ? dto.productTypeIds

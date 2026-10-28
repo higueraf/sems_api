@@ -10,6 +10,7 @@ import { ScientificProductType } from '../../entities/scientific-product-type.en
 import { User } from '../../entities/user.entity';
 import { Certificate } from '../../entities/certificate.entity';
 import { Person } from '../../entities/person.entity';
+import { Event } from '../../entities/event.entity';
 import { PersonsModule } from '../persons/persons.module';
 import { UniversitiesModule } from '../universities/universities.module';
 import { ResearchGroupsModule } from '../research-groups/research-groups.module';
@@ -25,6 +26,7 @@ import { ResearchGroupsModule } from '../research-groups/research-groups.module'
       User,
       Certificate,
       Person,
+      Event,
     ]),
     PersonsModule,
     UniversitiesModule,
