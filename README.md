@@ -71,7 +71,7 @@ npm run seed
 
 Carga:
 - 22 países de Latinoamérica e Iberia con emojis de bandera
-- Usuarios por defecto: `admin@sems.edu / Admin2026!` y `evaluador@sems.edu / Eval2026!`
+- Usuarios por defecto: `admin@sems.edu` y `evaluador@sems.edu`. La contraseña se toma de `SEED_ADMIN_PASSWORD`/`SEED_EVALUATOR_PASSWORD`, o se genera aleatoria y se imprime una sola vez en la consola si no se definen
 - 4 tipos de producto científico
 - Evento **II Simposio Internacional de Ciencia Abierta 2026**
 - 6 ejes temáticos

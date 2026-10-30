@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { DataSource } from 'typeorm';
 import { User } from '../../entities/user.entity';
 import { Country } from '../../entities/country.entity';
@@ -59,31 +60,42 @@ export async function seed(dataSource: DataSource) {
   console.log('✅ Countries seeded');
 
   // ─── Users ────────────────────────────────────────────────────────────────
+  // La contraseña inicial se toma de una variable de entorno; si no se provee,
+  // se genera una aleatoria y se imprime una sola vez para que se guarde y se
+  // cambie el perfil. Nunca queda un valor fijo en el código fuente.
   const adminExists = await userRepo.findOne({ where: { email: 'admin@sems.edu' } });
   if (!adminExists) {
+    const generatedAdminPassword = process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(9).toString('hex');
     // Pass plain text — @BeforeInsert() hook in User entity will hash it
     const admin = userRepo.create({
       email: 'admin@sems.edu',
-      password: 'Admin2026!',
+      password: generatedAdminPassword,
       firstName: 'Administrador',
       lastName: 'SEMS',
       role: UserRole.ADMIN,
       isActive: true,
     });
     await userRepo.save(admin);
+    if (!process.env.SEED_ADMIN_PASSWORD) {
+      console.log(`🔑 Contraseña generada para admin@sems.edu: ${generatedAdminPassword}`);
+    }
   }
 
   const evalExists = await userRepo.findOne({ where: { email: 'evaluador@sems.edu' } });
   if (!evalExists) {
+    const generatedEvaluatorPassword = process.env.SEED_EVALUATOR_PASSWORD || crypto.randomBytes(9).toString('hex');
     const evaluador = userRepo.create({
       email: 'evaluador@sems.edu',
-      password: 'Eval2026!',
+      password: generatedEvaluatorPassword,
       firstName: 'Evaluador',
       lastName: 'Científico',
       role: UserRole.EVALUATOR,
       isActive: true,
     });
     await userRepo.save(evaluador);
+    if (!process.env.SEED_EVALUATOR_PASSWORD) {
+      console.log(`🔑 Contraseña generada para evaluador@sems.edu: ${generatedEvaluatorPassword}`);
+    }
   }
   console.log('✅ Users seeded');
 
@@ -695,11 +707,7 @@ El evento reúne a investigadores, docentes, estudiantes y profesionales de dive
 
   console.log('\n🎉 Seed completed successfully!');
   console.log('──────────────────────────────────');
-  console.log('Admin credentials:');
-  console.log('  Email:    admin@sems.edu');
-  console.log('  Password: Admin2026!');
-  console.log('Evaluator credentials:');
-  console.log('  Email:    evaluador@sems.edu');
-  console.log('  Password: Eval2026!');
+  console.log('Admin:     admin@sems.edu (contraseña impresa arriba solo si se creó en esta corrida)');
+  console.log('Evaluator: evaluador@sems.edu (ídem)');
   console.log('──────────────────────────────────');
 }

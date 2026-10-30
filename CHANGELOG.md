@@ -95,7 +95,7 @@ bash migrations/run-migration.sh
 O ejecutar solo el archivo 003:
 
 ```bash
-PGPASSWORD=jateP455word psql -h localhost -p 5432 -U jate_user -d sems_db \
+PGPASSWORD=<tu_password> psql -h localhost -p 5432 -U jate_user -d sems_db \
   -f migrations/003_guideline_presentacion_y_multi_producto.sql
 ```
 
