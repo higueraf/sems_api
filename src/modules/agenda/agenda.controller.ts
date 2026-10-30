@@ -119,6 +119,13 @@ export class AgendaController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
+  @Patch('unpublish-all')
+  unpublishAll(@Query('eventId') eventId: string) {
+    return this.agendaService.unpublishAll(eventId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.EVALUATOR)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateAgendaSlotDto) {
     return this.agendaService.update(id, dto);

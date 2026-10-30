@@ -152,6 +152,11 @@ export class AgendaService {
     return { message: 'All slots published' };
   }
 
+  async unpublishAll(eventId: string) {
+    await this.repo.update({ eventId }, { isPublished: false });
+    return { message: 'All slots unpublished' };
+  }
+
   /** Reenvía el correo de programación al ponente de un slot específico (fuerza reenvío). */
   async notifySlot(id: string): Promise<{ sent: boolean; error?: string }> {
     const slot = await this.repo.findOne({
