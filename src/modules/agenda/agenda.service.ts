@@ -28,6 +28,7 @@ export class AgendaService {
       .leftJoinAndSelect('slot.submission', 'submission')
       .leftJoinAndSelect('submission.authors', 'authors')
       .leftJoinAndSelect('authors.country', 'authorCountry')
+      .leftJoinAndSelect('authors.university', 'authorUniversity')
       .leftJoinAndSelect('submission.thematicAxis', 'submissionAxis')
       .leftJoinAndSelect('slot.thematicAxis', 'axis')
       .where('slot.eventId = :eventId', { eventId })
@@ -245,6 +246,7 @@ export class AgendaService {
       .leftJoinAndSelect('s.thematicAxis', 'axis')
       .leftJoinAndSelect('s.authors', 'authors')
       .leftJoinAndSelect('authors.country', 'country')
+      .leftJoinAndSelect('authors.university', 'university')
       .where('s.eventId = :eventId', { eventId })
       .orderBy('s.referenceCode', 'ASC')
       .getMany();
